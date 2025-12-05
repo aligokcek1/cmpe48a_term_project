@@ -121,8 +121,9 @@ imageRegistry: "gcr.io/cmpe48a-term-project"
 ## Cloud Functions URLs (update after deploying Cloud Functions)
 
 cloudFunctions:
-  loanURL: "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/loan"
-  atmLocatorURL: "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/atm-locator"
+  loanRequestURL: "https://loan-request-gcb4q3froa-uc.a.run.app"
+  loanHistoryURL: "https://loan-history-gcb4q3froa-uc.a.run.app"
+  atmLocatorURL: "https://atm-locator-service-gcb4q3froa-uc.a.run.app"
 
 #######################################################################################
 ## Deploy locust

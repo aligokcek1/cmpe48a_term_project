@@ -126,7 +126,24 @@ def process_loan_request(request):
     }
     
     try:
+        # Handle both JSON and FormData
         request_json = request.get_json(silent=True)
+        if not request_json:
+            # Try to get data from form data
+            if request.form:
+                request_json = {
+                    'name': request.form.get('name'),
+                    'email': request.form.get('email'),
+                    'account_number': request.form.get('account_number'),
+                    'account_type': request.form.get('account_type'),
+                    'govt_id_number': request.form.get('govt_id_number'),
+                    'govt_id_type': request.form.get('govt_id_type'),
+                    'loan_type': request.form.get('loan_type'),
+                    'loan_amount': request.form.get('loan_amount'),
+                    'interest_rate': request.form.get('interest_rate'),
+                    'time_period': request.form.get('time_period')
+                }
+        
         if not request_json:
             return (jsonify({"error": "Invalid request body"}), 400, headers)
         
@@ -158,12 +175,20 @@ def get_loan_history(request):
     }
     
     try:
+        # Handle both JSON and FormData
         request_json = request.get_json(silent=True)
+        if not request_json:
+            # Try to get email from form data
+            email = request.form.get('email') or request.values.get('email')
+            if email:
+                request_json = {"email": email}
+        
         if not request_json or "email" not in request_json:
             return (jsonify({"error": "Email is required"}), 400, headers)
         
         result = loan_service.getLoanHistory(request_json)
-        return (jsonify({"history": result}), 200, headers)
+        # Wrap in response object to match dashboard API format
+        return (jsonify({"response": result}), 200, headers)
     
     except Exception as e:
         logging.exception("History retrieval error")
