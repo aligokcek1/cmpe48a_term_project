@@ -109,7 +109,20 @@ mongodb:
   enabled: false
 
 SERVICE_PROTOCOL: "http"
-DB_URL:  
+DB_URL: ""  # Will be set during deployment
+JWT_SECRET: ""  # Will be generated during deployment
+
+#######################################################################################
+## Image Registry Configuration
+
+imageRegistry: "gcr.io/cmpe48a-term-project"
+
+#######################################################################################
+## Cloud Functions URLs (update after deploying Cloud Functions)
+
+cloudFunctions:
+  loanURL: "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/loan"
+  atmLocatorURL: "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/atm-locator"
 
 #######################################################################################
 ## Deploy locust

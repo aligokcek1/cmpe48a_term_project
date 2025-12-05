@@ -16,7 +16,14 @@ spec:
         spec:
             containers:
                 - name: ui
-                  image: ghcr.io/cisco-open/martian-bank-demo-ui
+                  image: {{ .Values.imageRegistry }}/martianbank-ui:latest
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 512Mi
                   env: 
                     {{- if .Values.nginx.enabled }}
                       - name: VITE_USERS_URL
@@ -79,20 +86,27 @@ spec:
         spec:
             containers:
                 - name: dashboard
-                  image: ghcr.io/cisco-open/martian-bank-demo-dashboard
+                  image: {{ .Values.imageRegistry }}/martianbank-dashboard:latest
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 512Mi
                   env:
                       - name: SERVICE_PROTOCOL
                         value: {{.Values.SERVICE_PROTOCOL}}
                       - name: ACCOUNT_HOST
                         value: accounts
                       - name: LOAN_HOST
-                        value: loan
+                        value: {{ .Values.cloudFunctions.loanURL | default "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/loan" }}
                       - name: TRANSACTION_HOST
                         value: transactions
                       - name: CUSTOMER_AUTH_HOST
                         value: customer-auth
                       - name: ATM_LOCATOR_HOST
-                        value: atm-locator
+                        value: {{ .Values.cloudFunctions.atmLocatorURL | default "https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/atm-locator" }}
                   envFrom:
                       - configMapRef:
                           name: configmap-martianbank
@@ -102,7 +116,7 @@ kind: Service
 metadata:
     name: dashboard
 spec:
-    type: LoadBalancer
+    type: ClusterIP
     selector:
         app: dashboard
     ports:
@@ -132,9 +146,16 @@ spec:
         spec:
             containers:
                 - name: customer-auth
-                  image: ghcr.io/cisco-open/martian-bank-demo-customer-auth
+                  image: {{ .Values.imageRegistry }}/martianbank-customer-auth:latest
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 512Mi
                   env:
-                    {{- if not .Values.mongodb.enabled }}
+                    {{- if .Values.mongodb.enabled }}
                       - name: DATABASE_HOST
                         value: "root:example@mongodb"
                     {{- end }}
@@ -160,54 +181,6 @@ spec:
 
 
 
-# atm-locator
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-    name: atm-locator
-    labels:
-        app: atm-locator
-spec:
-    replicas: 1
-    selector:
-        matchLabels:
-            app: atm-locator
-    template:
-        metadata:
-            labels:
-                app: atm-locator
-        spec:
-            containers:
-                - name: atm-locator
-                  image: ghcr.io/cisco-open/martian-bank-demo-atm-locator
-                  env:
-                    {{- if not .Values.mongodb.enabled }}
-                      - name: DATABASE_HOST
-                        value: "root:example@mongodb"
-                    {{- end }}
-                      - name: NODE_ENV
-                        value: production
-                      - name: PORT 
-                        value: "8001"
-                  envFrom:
-                      - configMapRef:
-                          name: configmap-martianbank
----
-apiVersion: v1
-kind: Service
-metadata:
-    name: atm-locator
-spec:
-    selector:
-        app: atm-locator
-    ports:
-        - protocol: TCP
-          port: 8001
-          targetPort: 8001
-
-
-
 
 {{- if .Values.nginx.enabled }}
 # nginx
@@ -230,7 +203,14 @@ spec:
         spec:
             containers:
                 - name: nginx
-                  image: ghcr.io/cisco-open/martian-bank-demo-nginx 
+                  image: {{ .Values.imageRegistry }}/martianbank-nginx:latest
+                  resources:
+                    requests:
+                      cpu: 50m
+                      memory: 64Mi
+                    limits:
+                      cpu: 200m
+                      memory: 256Mi 
 ---
 apiVersion: v1
 kind: Service
@@ -268,7 +248,7 @@ spec:
         spec:
             containers:
                 - name: locust
-                  image: ghcr.io/cisco-open/martian-bank-demo-locust
+                  image: {{ .Values.imageRegistry }}/martianbank-locust:latest
                   env:
                     - name: VITE_USERS_URL
                       value: http://customer-auth:8000/api/users
