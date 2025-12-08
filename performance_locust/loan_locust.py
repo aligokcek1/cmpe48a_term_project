@@ -11,14 +11,23 @@ fake = Faker()
 
 
 class MyUser(HttpUser):
-    host = ApiUrls["VITE_LOAN_URL"]
+    host = "http://136.119.54.74:8080"
+    wait_time = between(2, 3)
+    
+    # Set connection and read timeout for the HTTP client
+    connection_timeout = 60.0
+    network_timeout = 60.0
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Configure the client with proper timeout settings
+        self.client.timeout = (30.0, 60.0)  # (connect timeout, read timeout)
 
     @task
     class MyUserTasks(SequentialTaskSet):
         wait_time = between(2, 3)
 
         def on_start(self):
-            account_host = ApiUrls["VITE_ACCOUNTS_URL"]
             # Create fake account data
             self.user_data = {
                 "name": fake.unique.name(),
@@ -35,14 +44,14 @@ class MyUser(HttpUser):
 
             # Create a new account
             self.client.post(
-                f"{account_host}/create",
+                "/api/accountcreate",
                 data=self.user_data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
             # Get all accounts
             response = self.client.post(
-                f"{account_host}/allaccounts",
+                "/api/accountallaccounts",
                 data={"email_id": self.user_data["email_id"]},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
@@ -60,15 +69,16 @@ class MyUser(HttpUser):
                 ["Base Camp", "Rover", "Potato Farming", "Ice Home", "Rocker"]
             )
             self.client.post(
-                "/",
+                "/api/loan/",
                 data=self.user_data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
         @task
         def history(self):
+            # Use the loan history endpoint (Cloud Function)
             self.client.post(
-                "/history",
+                "/api/loanhistory/",
                 data={"email": self.user_data["email_id"]},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )

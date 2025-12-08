@@ -4,11 +4,12 @@
 
 import os 
 
-VITE_ACCOUNTS_URL = os.getenv("VITE_ACCOUNTS_URL") or 'http://127.0.0.1:5000/account'
-VITE_USERS_URL = os.getenv("VITE_USERS_URL") or 'http://localhost:8000/api/users'
-VITE_ATM_URL = os.getenv("VITE_ATM_URL") or 'http://localhost:8001/api/atm'
-VITE_TRANSFER_URL = os.getenv("VITE_TRANSFER_URL") or 'http://127.0.0.1:5000/transaction'
-VITE_LOAN_URL = os.getenv("VITE_LOAN_URL") or 'http://127.0.0.1:5000/loan'
+VITE_ACCOUNTS_URL = 'http://136.119.54.74:8080/api/account'
+VITE_USERS_URL ='http://136.119.54.74:8080/api/users'
+VITE_ATM_URL = 'http://136.119.54.74:8080/api/atm'
+VITE_TRANSFER_URL ='http://136.119.54.74:8080/api/transaction'
+VITE_LOAN_URL ='http://136.119.54.74:8080/api/loan'
+VITE_LOAN_HISTORY_URL = 'http://136.119.54.74:8080/api/loanhistory'
 
 ApiUrls = {
     'VITE_ACCOUNTS_URL': VITE_ACCOUNTS_URL,
@@ -16,4 +17,5 @@ ApiUrls = {
     'VITE_ATM_URL': VITE_ATM_URL,
     'VITE_TRANSFER_URL': VITE_TRANSFER_URL,
     'VITE_LOAN_URL': VITE_LOAN_URL,
+    'VITE_LOAN_HISTORY_URL': VITE_LOAN_HISTORY_URL,
 }
