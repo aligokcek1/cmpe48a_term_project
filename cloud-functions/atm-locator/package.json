@@ -1,0 +1,10 @@
+{
+    "name": "atm-locator-function",
+    "version": "1.0.0",
+    "description": "ATM Locator Cloud Function",
+    "main": "index.js",
+    "dependencies": {
+        "@google-cloud/functions-framework": "^3.0.0",
+        "mongodb": "^6.0.0"
+    }
+}

@@ -2,345 +2,64 @@
 
 **Date:** December 5, 2025  
 **Project:** CMPE 48A Term Project - Martian Bank GCP Deployment  
-**Status:** Phase 5 Complete - Remaining Phases 3, 6-10
+**Status:** Phase 3 & Phase 5 Complete - Remaining Phases 6-10
 
 ---
 
 ## Overview
 
-This guide provides detailed, step-by-step instructions for completing the remaining phases of the Martian Bank GCP deployment project. The project is currently at **60% completion**, with Cloud Functions deployment and performance testing as the primary remaining tasks.
+This guide provides detailed, step-by-step instructions for completing the remaining phases of the Martian Bank GCP deployment project. The project is currently at **70% completion**, with performance testing and documentation as the primary remaining tasks.
 
-**Estimated Time to Complete:** 35-50 hours  
-**Priority Order:** Phase 3 → Phase 6 → Phase 7 → Phase 8 → Phase 9 → Phase 10
+**Estimated Time to Complete:** 25-37 hours  
+**Priority Order:** Phase 6 → Phase 7 → Phase 8 → Phase 9 → Phase 10
+
+**Completed Phases:**
+- ✅ Phase 1: Initial GKE Setup
+- ✅ Phase 2: MongoDB VM Configuration  
+- ✅ Phase 3: Cloud Functions Development (NEW)
+- ✅ Phase 4: Application Deployment
+- ✅ Phase 5: HPA and Load Balancer Configuration
 
 ---
 
-## Phase 3: Cloud Functions Development
+## Phase 3: Cloud Functions Development ✅ COMPLETE
 
 **Duration:** 8-10 hours  
 **Priority:** HIGH (Required for full functionality)  
-**Status:** Not Started
+**Status:** ✅ COMPLETED on December 5, 2025
 
-### 3.1 Loan Service Cloud Function
+### Summary
 
-#### Step 1: Analyze Current Loan Service
-```bash
-# Review the current loan service implementation
-cd /Users/aligokcek1/Documents/GitHub/cmpe48a_term_project
-cat loan/loan.py
-cat loan/requirements.txt
-```
+Successfully deployed three Cloud Functions to replace containerized microservices:
 
-**Key Endpoints to Convert:**
-- `/loan/request` - Process loan application
-- `/loan/history` - Get loan history
+1. **loan-request** (Python 3.11)
+   - URL: https://loan-request-gcb4q3froa-uc.a.run.app
+   - Entry Point: `process_loan_request`
+   - Features: FormData support, MongoDB integration, 10-field validation
 
-#### Step 2: Create Cloud Function Structure
-```bash
-# Create directory structure
-mkdir -p cloud-functions/loan
-cd cloud-functions/loan
+2. **loan-history** (Python 3.11)
+   - URL: https://loan-history-gcb4q3froa-uc.a.run.app
+   - Entry Point: `get_loan_history`
+   - Features: Email-based history retrieval, formatted response
 
-# Create main.py (Cloud Function entry point)
-# Create requirements.txt
-# Create .env.yaml (for MongoDB connection)
-```
+3. **atm-locator-service** (Node.js 20)
+   - URL: https://atm-locator-service-gcb4q3froa-uc.a.run.app
+   - Entry Point: `atmLocator`
+   - Features: Random ATM selection (4 max), filter support
 
-**File Structure:**
-```
-cloud-functions/
-  loan/
-    main.py              # Cloud Function entry points
-    requirements.txt     # Python dependencies
-    .env.yaml           # Environment variables (MongoDB connection)
-```
+### Key Achievements
+- ✅ Created VPC Connector (loan-connector) for MongoDB access
+- ✅ Updated NGINX configuration with Cloud Function URLs
+- ✅ Fixed FormData compatibility issues
+- ✅ Fixed response format mismatches
+- ✅ All endpoints tested and working in production
 
-#### Step 3: Convert Flask to Cloud Function
+### Infrastructure
+- **VPC Connector:** loan-connector (10.8.0.0/28, us-central1)
+- **MongoDB:** 10.128.0.2:27017 (Private VM)
+- **NGINX Image:** gcr.io/cmpe48a-term-project/martianbank-nginx:latest
 
-**main.py Template:**
-```python
-import functions_framework
-from flask import jsonify
-import os
-from pymongo import MongoClient
-import json
-
-# MongoDB connection
-DB_URL = os.environ.get('DB_URL', 'mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin')
-client = MongoClient(DB_URL)
-db = client["bank"]
-loans_collection = db["loans"]
-
-@functions_framework.http
-def process_loan_request(request):
-    """Process loan application request"""
-    # Handle CORS
-    if request.method == 'OPTIONS':
-        headers = {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        }
-        return ('', 204, headers)
-    
-    # Get request data
-    request_json = request.get_json(silent=True)
-    
-    # Process loan logic (copy from loan/loan.py)
-    # ... your loan processing code ...
-    
-    # Return response
-    headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-    }
-    return (jsonify(result), 200, headers)
-
-@functions_framework.http
-def get_loan_history(request):
-    """Get loan history"""
-    # Similar structure to process_loan_request
-    # ... implementation ...
-```
-
-**requirements.txt:**
-```txt
-functions-framework==3.*
-flask==3.1.2
-pymongo==4.15.5
-```
-
-#### Step 4: Deploy Loan Cloud Function
-```bash
-# Set environment variables
-export PROJECT_ID=$(gcloud config get-value project)
-export REGION=us-central1
-
-# Deploy the function
-cd cloud-functions/loan
-
-gcloud functions deploy loan-service \
-  --gen2 \
-  --runtime=python311 \
-  --region=$REGION \
-  --source=. \
-  --entry-point=process_loan_request \
-  --trigger-http \
-  --allow-unauthenticated \
-  --memory=512MB \
-  --timeout=60s \
-  --set-env-vars="DB_URL=mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin" \
-  --max-instances=10
-
-# Note: You'll need to deploy get_loan_history separately or combine them
-```
-
-**Get Function URL:**
-```bash
-gcloud functions describe loan-service \
-  --gen2 \
-  --region=$REGION \
-  --format="value(serviceConfig.uri)"
-```
-
-#### Step 5: Test Loan Function
-```bash
-# Test the function
-curl -X POST https://<function-url> \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@example.com",...}'
-```
-
-### 3.2 ATM Locator Cloud Function
-
-#### Step 1: Analyze Current ATM Locator Service
-```bash
-cd /Users/aligokcek1/Documents/GitHub/cmpe48a_term_project
-cat atm-locator/server.js
-cat atm-locator/package.json
-```
-
-#### Step 2: Create Cloud Function Structure
-```bash
-mkdir -p cloud-functions/atm-locator
-cd cloud-functions/atm-locator
-```
-
-**File Structure:**
-```
-cloud-functions/
-  atm-locator/
-    index.js           # Cloud Function entry point
-    package.json       # Node.js dependencies
-    config/
-      atm_data.json    # ATM data (if needed)
-```
-
-#### Step 3: Convert Express to Cloud Function
-
-**index.js Template:**
-```javascript
-const functions = require('@google-cloud/functions-framework');
-const { MongoClient } = require('mongodb');
-
-const DB_URL = process.env.DB_URL || 'mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin';
-
-functions.http('atmLocator', async (req, res) => {
-  // Set CORS headers
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.status(204).send('');
-    return;
-  }
-
-  try {
-    // Connect to MongoDB
-    const client = new MongoClient(DB_URL);
-    await client.connect();
-    const db = client.db('bank');
-    const atmsCollection = db.collection('atms');
-
-    // Handle different routes
-    if (req.method === 'POST' && req.path === '/api/atm') {
-      // Search ATMs logic (copy from atm-locator/server.js)
-      const { latitude, longitude, radius } = req.body;
-      // ... your ATM search logic ...
-      
-      const results = await atmsCollection.find({...}).toArray();
-      res.status(200).json(results);
-    } else if (req.method === 'GET' && req.path.startsWith('/api/atm/')) {
-      // Get specific ATM
-      const atmId = req.path.split('/').pop();
-      const atm = await atmsCollection.findOne({ _id: atmId });
-      res.status(200).json(atm);
-    } else {
-      res.status(404).json({ error: 'Not found' });
-    }
-
-    await client.close();
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-```
-
-**package.json:**
-```json
-{
-  "name": "atm-locator-function",
-  "version": "1.0.0",
-  "dependencies": {
-    "@google-cloud/functions-framework": "^3.0.0",
-    "mongodb": "^6.0.0"
-  }
-}
-```
-
-#### Step 4: Deploy ATM Locator Cloud Function
-```bash
-cd cloud-functions/atm-locator
-
-gcloud functions deploy atm-locator-service \
-  --gen2 \
-  --runtime=nodejs18 \
-  --region=$REGION \
-  --source=. \
-  --entry-point=atmLocator \
-  --trigger-http \
-  --allow-unauthenticated \
-  --memory=512MB \
-  --timeout=60s \
-  --set-env-vars="DB_URL=mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin" \
-  --max-instances=10
-```
-
-**Get Function URL:**
-```bash
-gcloud functions describe atm-locator-service \
-  --gen2 \
-  --region=$REGION \
-  --format="value(serviceConfig.uri)"
-```
-
-### 3.3 Update Application Configuration
-
-#### Step 1: Update Helm Values
-```bash
-# Get Cloud Function URLs
-LOAN_URL=$(gcloud functions describe loan-service --gen2 --region=us-central1 --format="value(serviceConfig.uri)")
-ATM_URL=$(gcloud functions describe atm-locator-service --gen2 --region=us-central1 --format="value(serviceConfig.uri)")
-
-# Update values.yaml
-cat >> martianbank/values.yaml <<EOF
-# Update these with actual URLs
-cloudFunctions:
-  loanURL: "$LOAN_URL"
-  atmLocatorURL: "$ATM_URL"
-EOF
-```
-
-#### Step 2: Update NGINX Configuration
-```bash
-# Edit nginx/default.conf
-# Update /api/atm location to use Cloud Function URL
-# Update /api/loan location if needed
-```
-
-**nginx/default.conf update:**
-```nginx
-location /api/atm {
-    proxy_pass https://<atm-locator-function-url>;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_ssl_server_name on;
-}
-
-location /api/loan {
-    proxy_pass https://<loan-function-url>;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_ssl_server_name on;
-}
-```
-
-#### Step 3: Rebuild NGINX Image
-```bash
-./scripts/rebuild_images.sh nginx
-```
-
-#### Step 4: Redeploy Application
-```bash
-helm upgrade martianbank ./martianbank \
-  --namespace martianbank \
-  --set SERVICE_PROTOCOL=http \
-  --set DB_URL="mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin" \
-  --set JWT_SECRET="$(openssl rand -hex 32)" \
-  --set imageRegistry="gcr.io/cmpe48a-term-project" \
-  --set mongodb.enabled=false \
-  --set nginx.enabled=true \
-  --set cloudFunctions.loanURL="$LOAN_URL" \
-  --set cloudFunctions.atmLocatorURL="$ATM_URL"
-```
-
-#### Step 5: Verify Cloud Functions Integration
-```bash
-# Test from browser
-# Navigate to http://136.119.54.74:8080
-# Test loan application feature
-# Test ATM location search
-```
-
-**Deliverables:**
-- ✅ Loan Cloud Function deployed
-- ✅ ATM Locator Cloud Function deployed
-- ✅ Application updated to use Cloud Functions
-- ✅ All features functional
+**For detailed information, see:** `docs/PHASE3_COMPLETION_REPORT.md`
 
 ---
 
@@ -363,11 +82,14 @@ cd performance_locust
 ApiUrls = {
     'VITE_ACCOUNTS_URL': 'http://136.119.54.74:8080/api/account',
     'VITE_USERS_URL': 'http://136.119.54.74:8080/api/users',
-    'VITE_ATM_URL': 'http://136.119.54.74:8080/api/atm',
+    'VITE_ATM_URL': 'http://136.119.54.74:8080/api/atm',  # Now routes to Cloud Function
     'VITE_TRANSFER_URL': 'http://136.119.54.74:8080/api/transaction',
-    'VITE_LOAN_URL': 'http://136.119.54.74:8080/api/loan',
+    'VITE_LOAN_URL': 'http://136.119.54.74:8080/api/loan',  # Now routes to Cloud Function
+    'VITE_LOAN_HISTORY_URL': 'http://136.119.54.74:8080/api/loanhistory',  # Cloud Function
 }
 ```
+
+**Note:** All URLs now point to the NGINX load balancer which routes to appropriate backends (GKE services or Cloud Functions).
 
 #### Step 2: Review and Update Test Files
 ```bash
@@ -386,11 +108,16 @@ ApiUrls = {
 
 #### Step 3: Test Locust Scripts Locally
 ```bash
-# Install Locust
+# Install Locust (if not already installed)
 pip install locust
 
-# Test against GCP endpoints
+# Test individual scripts against GCP endpoints
 locust -f account_locust.py --host=http://136.119.54.74:8080
+locust -f loan_locust.py --host=http://136.119.54.74:8080
+locust -f atm_locust.py --host=http://136.119.54.74:8080
+
+# Important: Update loan_locust.py to use /api/loanhistory endpoint
+# Important: Update atm_locust.py to handle 4 ATM limit
 ```
 
 ### 6.2 Performance Test Execution
@@ -450,8 +177,15 @@ locust -f account_locust.py \
 - Error rates (4xx, 5xx)
 - Pod count over time (HPA scaling)
 - CPU/Memory usage per pod
-- Cloud Function invocation metrics
+- **Cloud Function metrics (NEW):**
+  - Invocation count
+  - Cold start frequency and latency
+  - Warm response times
+  - Error rates
+  - Active instances
+  - Memory usage
 - Database connection pool usage
+- VPC Connector throughput
 
 **Commands:**
 ```bash
@@ -464,7 +198,13 @@ watch kubectl get hpa -n martianbank
 # Check pod metrics
 kubectl top pods -n martianbank
 
-# View Cloud Function metrics in GCP Console
+# View Cloud Function metrics
+# In GCP Console: Cloud Functions > Select function > Metrics tab
+
+# View Cloud Function logs
+gcloud functions logs read loan-request --gen2 --region=us-central1 --limit=50
+gcloud functions logs read loan-history --gen2 --region=us-central1 --limit=50
+gcloud functions logs read atm-locator-service --gen2 --region=us-central1 --limit=50
 ```
 
 #### Step 5: Document Results
@@ -639,13 +379,14 @@ gcloud compute instances stop mongodb-vm --zone=us-central1-a
 ### 9.1 End-to-End Testing
 
 #### Step 1: Test All Features
-- [ ] User registration
-- [ ] User authentication
-- [ ] Account creation
-- [ ] Account details viewing
-- [ ] Transaction processing
-- [ ] Loan application (Cloud Function)
-- [ ] ATM location search (Cloud Function)
+- [x] User registration
+- [x] User authentication
+- [x] Account creation
+- [x] Account details viewing
+- [x] Transaction processing
+- [x] Loan application (Cloud Function) - **TESTED & WORKING**
+- [x] Loan history (Cloud Function) - **TESTED & WORKING**
+- [x] ATM location search (Cloud Function) - **TESTED & WORKING**
 
 #### Step 2: Verify HPA Scaling
 ```bash
@@ -661,13 +402,13 @@ kubectl get hpa -n martianbank -w
 
 ### 9.2 System Validation
 
-#### Step 1: Requirements Checklist
+#### Step 2: Requirements Checklist
 - [x] Containerized workloads on Kubernetes (GKE)
 - [x] Scalable deployment (HPA)
 - [x] Virtual Machines (MongoDB VM)
-- [ ] Serverless Functions (Loan, ATM Locator) - **PENDING**
+- [x] Serverless Functions (Loan, ATM Locator) - **✅ COMPLETE**
 - [ ] Performance testing (Locust) - **PENDING**
-- [ ] Cost within budget - **PENDING**
+- [ ] Cost within budget - **PENDING VALIDATION**
 
 #### Step 2: Create Validation Report
 - Document all requirements met
@@ -729,16 +470,25 @@ kubectl get hpa -n martianbank -w
 
 ## Quick Reference Commands
 
-### Cloud Functions
+### Cloud Functions (DEPLOYED)
 ```bash
-# Deploy function
-gcloud functions deploy <function-name> --gen2 --runtime=python311 --region=us-central1 --trigger-http
+# Redeploy function (if changes made)
+cd cloud-functions/<function-directory>
+gcloud functions deploy <function-name> --gen2 --runtime=python311/nodejs20 \
+  --region=us-central1 --source=. --entry-point=<entry-point> \
+  --trigger-http --allow-unauthenticated --vpc-connector=loan-connector \
+  --set-env-vars="DB_URL=mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin"
 
 # Get function URL
 gcloud functions describe <function-name> --gen2 --region=us-central1 --format="value(serviceConfig.uri)"
 
 # View logs
-gcloud functions logs read <function-name> --gen2 --region=us-central1
+gcloud functions logs read <function-name> --gen2 --region=us-central1 --limit=50
+
+# Deployed Functions:
+# - loan-request (https://loan-request-gcb4q3froa-uc.a.run.app)
+# - loan-history (https://loan-history-gcb4q3froa-uc.a.run.app)
+# - atm-locator-service (https://atm-locator-service-gcb4q3froa-uc.a.run.app)
 ```
 
 ### Performance Testing
@@ -767,15 +517,15 @@ gcloud compute instances start mongodb-vm --zone=us-central1-a
 
 ## Timeline Estimate
 
-| Phase | Duration | Priority |
-|-------|----------|----------|
-| Phase 3: Cloud Functions | 8-10 hours | HIGH |
-| Phase 6: Performance Testing | 10-14 hours | HIGH |
-| Phase 7: Cost Monitoring | 3-5 hours | MEDIUM |
-| Phase 8: Documentation | 8-11 hours | MEDIUM |
-| Phase 9: Final Testing | 3-5 hours | HIGH |
-| Phase 10: Demo Video | 5-7 hours | HIGH |
-| **Total** | **37-52 hours** | |
+| Phase | Duration | Priority | Status |
+|-------|----------|----------|--------|
+| ~~Phase 3: Cloud Functions~~ | ~~8-10 hours~~ | ~~HIGH~~ | ✅ **COMPLETE** |
+| Phase 6: Performance Testing | 10-14 hours | HIGH | ⏳ Next |
+| Phase 7: Cost Monitoring | 3-5 hours | MEDIUM | Pending |
+| Phase 8: Documentation | 8-11 hours | MEDIUM | Pending |
+| Phase 9: Final Testing | 3-5 hours | HIGH | Pending |
+| Phase 10: Demo Video | 5-7 hours | HIGH | Pending |
+| **Remaining** | **29-42 hours** | | **30% Left** |
 
 ---
 
@@ -804,10 +554,10 @@ gcloud compute instances start mongodb-vm --zone=us-central1-a
 ## Success Criteria
 
 ### Must Complete
-- [ ] Cloud Functions deployed and functional
-- [ ] Performance tests executed
+- [x] Cloud Functions deployed and functional - **✅ COMPLETE**
+- [ ] Performance tests executed - **NEXT PRIORITY**
 - [ ] Performance results documented
-- [ ] Cost within budget
+- [ ] Cost within budget (validate)
 - [ ] Demo video created
 - [ ] All requirements met
 

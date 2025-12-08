@@ -27,10 +27,10 @@ const getATMs = asyncHandler(async (req, res) => {
     isOpen: 1,
   });
   const shuffledATMs = [...ATMs].sort(() => Math.random() - 0.5).slice(0, 4);
-  if (shuffledATMs) {
+  if (shuffledATMs && shuffledATMs.length > 0) {
     res.status(200).json(shuffledATMs);
   } else {
-    res.status(404).json("No ATMs found");
+    res.status(404).json({ error: "No ATMs found" });
     throw new Error("No results found");
   }
 });
