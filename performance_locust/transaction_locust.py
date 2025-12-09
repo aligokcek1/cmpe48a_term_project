@@ -13,15 +13,23 @@ fake = Faker()
 
 
 class MyUser(HttpUser):
-    host = ApiUrls["VITE_TRANSFER_URL"]
+    host = "http://136.119.54.74:8080"
+    wait_time = between(2, 3)
+    
+    # Set connection and read timeout for the HTTP client
+    connection_timeout = 60.0
+    network_timeout = 60.0
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Configure the client with proper timeout settings
+        self.client.timeout = (30.0, 60.0)  # (connect timeout, read timeout)
 
     @task
     class MyUserTasks(SequentialTaskSet):
         wait_time = between(2, 3)
 
         def on_start(self):
-            accounts_host = ApiUrls["VITE_ACCOUNTS_URL"]
-
             ##### FIRST USER #####
 
             # Create fake checking account data
@@ -36,7 +44,7 @@ class MyUser(HttpUser):
                 "address": fake.unique.address(),
             }
             self.client.post(
-                f"{accounts_host}/create",
+                "/api/accountcreate",
                 data=self.first_user,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
@@ -46,14 +54,14 @@ class MyUser(HttpUser):
                 ["Savings", "Money Market", "Investment"]
             )
             self.client.post(
-                f"{accounts_host}/create",
+                "/api/accountcreate",
                 data=self.first_user,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
             # Get all accounts
             response = self.client.post(
-                f"{accounts_host}/allaccounts",
+                "/api/accountallaccounts",
                 data={"email_id": self.first_user["email_id"]},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
@@ -74,7 +82,7 @@ class MyUser(HttpUser):
                 "address": fake.unique.address(),
             }
             self.client.post(
-                f"{accounts_host}/create",
+                "/api/accountcreate",
                 data=self.second_user,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
@@ -82,7 +90,7 @@ class MyUser(HttpUser):
         @task
         def internal_transfer(self):
             self.client.post(
-                f"/",
+                "/api/transaction",
                 data={
                     "sender_account_number": self.account_numbers[0],
                     "receiver_account_number": self.account_numbers[1],
@@ -95,7 +103,7 @@ class MyUser(HttpUser):
         @task
         def external_transfer(self):
             self.client.post(
-                f"/zelle/",
+                "/api/transactionzelle/",
                 data={
                     "sender_email": self.first_user["email_id"],
                     "receiver_email": self.second_user["email_id"],
@@ -108,7 +116,7 @@ class MyUser(HttpUser):
         @task
         def transaction_history(self):
             self.client.post(
-                f"/history",
+                "/api/transactionhistory",
                 data={"account_number": self.account_numbers[0]},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
