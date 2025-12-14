@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Re-login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Re-login'),1
+POST,[Transaction] Internal Transfer,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] Internal Transfer'),911
+POST,[Auth] Logout,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Logout'),2
+POST,[Transaction] View History,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] View History'),667
