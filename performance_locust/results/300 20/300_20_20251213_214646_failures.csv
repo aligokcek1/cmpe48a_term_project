@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences
+POST,[Account] Create Checking Account,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Account] Create Checking Account'),7
+POST,[Account] View All Accounts,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Account] View All Accounts'),17
+POST,[Account] Create Savings Account,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Account] Create Savings Account'),14
+POST,[Account] Get All Accounts,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Account] Get All Accounts'),17

@@ -1,0 +1,7 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Register User,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Register User'),1
+POST,[Loan] View History (Cloud Function),HTTPError('500 Server Error: Internal Server Error for url: [Loan] View History (Cloud Function)'),3
+POST,[Loan] Submit Application (Cloud Function),HTTPError('500 Server Error: Internal Server Error for url: [Loan] Submit Application (Cloud Function)'),24
+POST,[Auth] Login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Login'),4
+POST,[Loan] Submit Application (Cloud Function),HTTPError('429 Client Error: Too Many Requests for url: [Loan] Submit Application (Cloud Function)'),5
+POST,[Loan] View History (Cloud Function),HTTPError('429 Client Error: Too Many Requests for url: [Loan] View History (Cloud Function)'),1

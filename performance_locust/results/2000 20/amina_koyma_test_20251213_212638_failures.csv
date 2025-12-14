@@ -1,0 +1,33 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Login,"ConnectionResetError(10054, 'Varolan bir bağlantı uzaktaki bir ana bilgisayar tarafından zorla kapatıldı', None, 10054, None)",2
+POST,[Auth] Login,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",8
+POST,[Auth] Register User,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Register User'),897
+GET,[Account] View Account Details,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",13
+POST,[Transaction] View History,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",5
+POST,[Auth] Login,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Login'),73
+POST,[Account] Create Savings Account,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",18
+POST,[Account] Create Checking Account,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",17
+POST,[Auth] Register User,RemoteDisconnected('Remote end closed connection without response'),48
+POST,[Account] Get All Accounts,"ConnectionResetError(10054, 'Varolan bir bağlantı uzaktaki bir ana bilgisayar tarafından zorla kapatıldı', None, 10054, None)",2
+POST,[Account] Get All Accounts,HTTPError('502 Server Error: Bad Gateway for url: [Account] Get All Accounts'),7
+POST,[Account] Create Checking Account,HTTPError('502 Server Error: Bad Gateway for url: [Account] Create Checking Account'),1
+POST,[Transaction] Internal Transfer,HTTPError('502 Server Error: Bad Gateway for url: [Transaction] Internal Transfer'),5
+POST,[Account] Get All Accounts,RemoteDisconnected('Remote end closed connection without response'),2
+POST,[Loan] View History (Cloud Function),"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",4
+POST,[ATM] Search Locations (Cloud Function),"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",5
+POST,[Account] Get All Accounts,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",16
+GET,[Account] View Account Details,HTTPError('502 Server Error: Bad Gateway for url: [Account] View Account Details'),4
+POST,[Transaction] Internal Transfer,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",1
+POST,[Auth] Login,RemoteDisconnected('Remote end closed connection without response'),3
+POST,[Auth] Register User,"ConnectionResetError(10054, 'Varolan bir bağlantı uzaktaki bir ana bilgisayar tarafından zorla kapatıldı', None, 10054, None)",3
+POST,[Account] View All Accounts,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",11
+POST,[Account] Create Savings Account,RemoteDisconnected('Remote end closed connection without response'),2
+POST,[Account] View All Accounts,RemoteDisconnected('Remote end closed connection without response'),1
+POST,[Auth] Register User,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",887
+POST,[Auth] Re-login,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Re-login'),1
+POST,[Transaction] View History,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] View History'),4
+PUT,[Auth] Update Profile,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Update Profile'),1
+POST,[Account] View All Accounts,HTTPError('502 Server Error: Bad Gateway for url: [Account] View All Accounts'),5
+GET,[Account] View Account Details,RemoteDisconnected('Remote end closed connection without response'),1
+PUT,[Auth] Update Profile,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",1
+POST,[Transaction] View History,HTTPError('502 Server Error: Bad Gateway for url: [Transaction] View History'),2
