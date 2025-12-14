@@ -1,0 +1,50 @@
+graph TD
+    subgraph "The Internet"
+        User["User / Browser"]
+        Locust["Locust Load Tester"]
+    end
+
+    subgraph "Google Cloud Platform"
+        
+        subgraph "Traffic Controller"
+            GLB["Load Balancer"]
+        end
+
+        subgraph "Kubernetes Cluster (GKE)"
+            
+            subgraph "The Application"
+                Web["Frontend UI"]
+                API["Backend API (Customer/Account/TXs Services)"]
+            end
+            
+            %% Simple Autoscaling
+            HPA["Autoscaler (HPA)"] -.-> API
+        end
+
+        subgraph "Virtual Machine (VM)"
+            DB_VM[("Database VM (MongoDB)")]
+        end
+
+        subgraph "Serverless"
+            Func[("Cloud Function (Loan/Credit, ATM Locator Services)")]
+        end
+    end
+
+    %% Simple Connections
+    User --> GLB
+    Locust --> GLB
+    GLB --> Web
+   
+    
+    Web -->|Calls| API
+    Web -->|Calls| Func
+    
+    API -->|Saves Data| DB_VM
+
+    classDef k8s fill:#326ce5,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef vm fill:#ff9800,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef serverless fill:#4caf50,stroke:#fff,stroke-width:2px,color:#fff;
+    
+    class Web,API,Ingress k8s;
+    class DB_VM vm;
+    class Func serverless;
