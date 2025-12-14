@@ -1,0 +1,6 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Register User,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Register User'),291
+POST,[Auth] Register User,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Register User'),61
+POST,[Auth] Login,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Login'),12
+POST,[Auth] Login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Login'),10
+PUT,[Auth] Update Profile,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Update Profile'),1

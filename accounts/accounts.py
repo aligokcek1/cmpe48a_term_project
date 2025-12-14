@@ -36,7 +36,7 @@ logging.debug(f"microservice protocol: {protocol}")
 
 uri = db_url
 
-client = MongoClient(uri)
+client = MongoClient(uri, maxPoolSize=200, minPoolSize=10)
 db = client["bank"]
 collection = db["accounts"]
 
