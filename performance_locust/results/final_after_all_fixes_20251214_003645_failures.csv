@@ -1,0 +1,3 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Register User,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Register User'),44
+POST,[Auth] Login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Login'),25

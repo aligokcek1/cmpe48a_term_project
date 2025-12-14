@@ -1,0 +1,7 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Re-login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Re-login'),1
+POST,[Transaction] Internal Transfer,HTTPError('502 Server Error: Bad Gateway for url: [Transaction] Internal Transfer'),2
+POST,[Account] View All Accounts,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Account] View All Accounts'),4
+GET,[Account] View Account Details,HTTPError('502 Server Error: Bad Gateway for url: [Account] View Account Details'),4
+POST,[Account] View All Accounts,HTTPError('502 Server Error: Bad Gateway for url: [Account] View All Accounts'),2
+POST,[Transaction] View History,HTTPError('502 Server Error: Bad Gateway for url: [Transaction] View History'),3
