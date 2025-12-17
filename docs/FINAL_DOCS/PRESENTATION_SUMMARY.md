@@ -160,7 +160,7 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 
 ### Testing Framework
 - **Tool:** Locust (Python-based load testing)
-- **Test Scenarios:** Multiple load levels (10, 50, 100, 200, 300 users)
+- **Test Scenarios:** Multiple load levels (20, 50, 100, 200, 300 users)
 - **Duration:** 5 minutes per test
 - **Metrics Collected:**
   - Request latency (p50, p95, p99)
@@ -170,7 +170,7 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 
 ### Test Design
 **Independent Variables:**
-- Concurrent users (10, 50, 100, 200, 300)
+- Concurrent users (20, 50, 100, 200, 300)
 - Spawn rate (2-40 users/second)
 - Test duration (5 minutes)
 
@@ -223,7 +223,6 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 - **GCP Trial Budget:** $300
 - **Estimated Monthly Cost:** ~$206-262
 - **Status:** ✅ Within budget constraints
-- **Optimization:** Ongoing monitoring and adjustments
 
 ---
 

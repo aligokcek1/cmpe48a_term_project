@@ -40,18 +40,6 @@ graph TB
     style DB fill:#ffebee
 ```
 
-## Routing Table
-
-| Ingress Path | Route To | Service Type | Protocol |
-|--------------|----------|--------------|----------|
-| `/` | `http://ui:3000` | Kubernetes Service | HTTP |
-| `/api/users` | `http://customer-auth:8000/api/users/` | Kubernetes Service | HTTP |
-| `/api/account` | `http://dashboard:5000/account/` | Kubernetes Service | HTTP |
-| `/api/transaction` | `http://dashboard:5000/transaction/` | Kubernetes Service | HTTP |
-| `/api/transactionzelle/` | `http://dashboard:5000/transaction/zelle/` | Kubernetes Service | HTTP |
-| `/api/loan` | `https://loan-request-gcb4q3froa-uc.a.run.app/` | Cloud Function | HTTPS |
-| `/api/loanhistory` | `https://loan-history-gcb4q3froa-uc.a.run.app/` | Cloud Function | HTTPS |
-| `/api/atm` | `https://atm-locator-service-gcb4q3froa-uc.a.run.app/` | Cloud Function | HTTPS |
 
 ## Request Flow Summary
 
