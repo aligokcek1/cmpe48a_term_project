@@ -1,0 +1,6 @@
+Method,Name,Error,Occurrences
+POST,[Transaction] View History,HTTPError('504 Server Error: Gateway Time-out for url: [Transaction] View History'),158
+POST,[Auth] Register User,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Register User'),4
+POST,[Transaction] Internal Transfer,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] Internal Transfer'),88
+POST,[Transaction] Internal Transfer,HTTPError('504 Server Error: Gateway Time-out for url: [Transaction] Internal Transfer'),124
+POST,[Transaction] View History,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] View History'),108

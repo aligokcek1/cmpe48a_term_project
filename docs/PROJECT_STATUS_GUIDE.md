@@ -91,7 +91,8 @@ Status: RUNNING
 Master IP: 34.9.197.138
 Node Pool: default-pool
   - 3 nodes (e2-medium: 2 vCPU, 4GB RAM each)
-  - Auto-scaling: 2-5 nodes
+  - Auto-scaling: Disabled (fixed 3 nodes)
+  - Disk Size: 40GB per node (pd-balanced)
   - Auto-repair: Enabled
   - Auto-upgrade: Enabled
 ```
@@ -111,7 +112,7 @@ Zone: us-central1-a
 Status: RUNNING
 Internal IP: 10.128.0.2
 External IP: (None - internal only)
-Machine Type: e2-small (0.5 vCPU, 2GB RAM)
+Machine Type: e2-small (2 vCPU, 2GB RAM)
 OS: Ubuntu 22.04 LTS
 MongoDB Port: 27017
 ```
@@ -181,16 +182,85 @@ Images:
 
 ### Horizontal Pod Autoscaler (HPA)
 
+**Important:** HPAs are manually configured using `kubectl` commands, not via Helm charts. Only transactions and customer-auth services have HPA enabled.
+
 | Service | CPU Target | Current | Min | Max | Replicas | Status |
 |---------|-----------|---------|-----|-----|----------|--------|
-| accounts | 70% | 4% | 1 | 5 | 1 | ✅ Active |
-| transactions | 70% | 4% | 1 | 5 | 1 | ✅ Active |
-| customer-auth | 70% | 0% | 1 | 3 | 1 | ✅ Active |
-| dashboard | 70% | 1% | 1 | 3 | 1 | ✅ Active |
-| ui | 70% | 10% | 1 | 3 | 1 | ✅ Active |
-| nginx | 70% | 0% | 1 | 3 | 1 | ✅ Active |
+| accounts | N/A | 4% | N/A | N/A | 1 | ❌ No HPA |
+| transactions | 50% | 4% | 1 | 3 | 1 | ✅ Active |
+| customer-auth | 50% | 0% | 2 | 2 | 2 | ✅ Active (Fixed) |
+| dashboard | N/A | 1% | N/A | N/A | 1 | ❌ No HPA |
+| ui | N/A | 10% | N/A | N/A | 1 | ❌ No HPA |
+| nginx | N/A | 0% | N/A | N/A | 1 | ❌ No HPA |
 
-**All HPAs:** 6/6 Active ✅
+**HPAs:** 2/6 services have HPA (transactions, customer-auth)
+
+#### Manual HPA Configuration Commands
+
+HPAs must be configured manually after deployment. Use these commands:
+
+**1. Ensure Metrics Server is Installed:**
+```bash
+# Check if metrics server exists
+kubectl get deployment metrics-server -n kube-system
+
+# If not exists, install it (required for HPA)
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+**2. Create HPA for Transactions Service:**
+```bash
+# Create HPA (min: 1, max: 3, CPU target: 50%)
+kubectl autoscale deployment transactions -n martianbank \
+  --min=1 \
+  --max=3 \
+  --cpu=50%
+
+# Verify
+kubectl get hpa transactions -n martianbank
+```
+
+**3. Create HPA for Customer-Auth Service:**
+```bash
+# Create HPA (fixed at 2 replicas, CPU target: 50%)
+kubectl autoscale deployment customer-auth -n martianbank \
+  --min=2 \
+  --max=2 \
+  --cpu=50%
+
+# Verify
+kubectl get hpa customer-auth -n martianbank
+```
+
+**4. Update Existing HPA (if needed):**
+```bash
+# Update transactions HPA max replicas
+kubectl patch hpa transactions -n martianbank -p '{"spec":{"maxReplicas":3}}'
+
+# Update transactions HPA min replicas
+kubectl patch hpa transactions -n martianbank -p '{"spec":{"minReplicas":1}}'
+
+# Update CPU threshold to 50%
+kubectl patch hpa transactions -n martianbank -p '{"spec":{"metrics":[{"type":"Resource","resource":{"name":"cpu","target":{"type":"Utilization","averageUtilization":50}}}]}}'
+
+# Update customer-auth HPA (min and max to 2)
+kubectl patch hpa customer-auth -n martianbank -p '{"spec":{"minReplicas":2,"maxReplicas":2}}'
+```
+
+**5. View HPA Status:**
+```bash
+# List all HPAs
+kubectl get hpa -n martianbank
+
+# View detailed HPA information
+kubectl describe hpa transactions -n martianbank
+kubectl describe hpa customer-auth -n martianbank
+```
+
+**Note:** When you use `kubectl patch hpa`, you're modifying the live Kubernetes resource in the cluster's etcd database. This does NOT modify any files in your codebase. To persist HPA configurations, you can:
+- Export HPAs to YAML: `kubectl get hpa <name> -n martianbank -o yaml > k8s/hpa-<name>.yaml`
+- Document the `kubectl` commands used
+- Re-run the commands after cluster recreation
 
 ### Cloud Functions
 
@@ -244,14 +314,14 @@ Status: ✅ Populated
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │   NGINX      │ │     UI       │ │  Dashboard   │
 │ (LoadBalancer)│ │  (React)     │ │  (Flask)     │
-│   HPA: 1-3   │ │  HPA: 1-3    │ │  HPA: 1-3    │
+│  No HPA      │ │  No HPA      │ │  No HPA      │
 └──────┬───────┘ └──────────────┘ └──────┬───────┘
        │                                   │
        ▼                                   ▼
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │Customer-Auth │ │  Accounts    │ │ Transactions │
 │  (Node.js)   │ │  (Flask)     │ │  (Flask)     │
-│  HPA: 1-3    │ │  HPA: 1-5    │ │  HPA: 1-5    │
+│  HPA: 2-2    │ │  No HPA      │ │  HPA: 1-3    │
 └──────────────┘ └──────────────┘ └──────────────┘
                          │
                          ▼
@@ -566,7 +636,11 @@ curl -X POST http://136.119.54.74:8080/api/atm \
 watch kubectl get hpa -n martianbank
 
 # View HPA events
-kubectl describe hpa <hpa-name> -n martianbank
+kubectl describe hpa transactions -n martianbank
+kubectl describe hpa customer-auth -n martianbank
+
+# View HPA scaling history
+kubectl get hpa transactions -n martianbank -w
 ```
 
 ### Check Resource Usage
@@ -661,16 +735,28 @@ curl -X POST https://<function-url> \
 kubectl get hpa -n martianbank
 
 # Describe HPA for details
-kubectl describe hpa <hpa-name> -n martianbank
+kubectl describe hpa transactions -n martianbank
+kubectl describe hpa customer-auth -n martianbank
 
 # Check if metrics server is running
 kubectl get deployment metrics-server -n kube-system
+
+# Check if deployments have resource requests (required for HPA)
+kubectl get deployment transactions -n martianbank -o yaml | grep -A 5 resources
+kubectl get deployment customer-auth -n martianbank -o yaml | grep -A 5 resources
 ```
 
 **Common Issues:**
-- Missing CPU/memory requests in deployment
+- Missing CPU/memory requests in deployment (HPA requires resource requests)
 - Metrics server not installed
 - Resource limits too low
+- HPA not created (must be created manually with `kubectl autoscale`)
+
+**To Fix Missing Resource Requests:**
+```bash
+# Add resource requests to deployment (example for transactions)
+kubectl patch deployment transactions -n martianbank -p '{"spec":{"template":{"spec":{"containers":[{"name":"transactions","resources":{"requests":{"cpu":"100m","memory":"128Mi"}}}]}}}}'
+```
 
 ---
 
@@ -853,9 +939,9 @@ helm upgrade martianbank ./martianbank --namespace martianbank --reuse-values
 
 ### Completed ✅
 - [x] All services deployed on GKE
-- [x] MongoDB running on Compute Engine VM
+- [x] MongoDB running on Compute Engine VM (e2-small)
 - [x] Cloud Functions deployed and active
-- [x] HPA configured for all services
+- [x] HPA manually configured for transactions (1-3) and customer-auth (2-2)
 - [x] Load Balancer configured
 - [x] Application accessible externally
 - [x] Database populated with test data

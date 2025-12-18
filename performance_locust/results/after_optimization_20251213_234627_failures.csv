@@ -1,3 +1,0 @@
-Method,Name,Error,Occurrences
-POST,[Auth] Register User,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Register User'),271
-POST,[Auth] Login,HTTPError('504 Server Error: Gateway Time-out for url: [Auth] Login'),15

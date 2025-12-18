@@ -141,6 +141,71 @@ kubectl get service nginx -n martianbank
 # Access application at http://EXTERNAL_IP:8080
 ```
 
+### 8. Configure HPA (Horizontal Pod Autoscaler) - Manual Configuration (10 minutes)
+
+**Important:** HPAs are configured manually using `kubectl` commands, not via Helm charts. This allows for fine-grained control over scaling behavior.
+
+#### 8.1 Ensure Metrics Server is Running
+```bash
+# Check if metrics server exists
+kubectl get deployment metrics-server -n kube-system
+
+# If not exists, install it (required for HPA)
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+#### 8.2 Configure HPA for Transactions Service
+```bash
+# Create HPA for transactions (min: 1, max: 3, CPU target: 50%)
+kubectl autoscale deployment transactions -n martianbank \
+  --min=1 \
+  --max=3 \
+  --cpu=50%
+
+# Verify HPA creation
+kubectl get hpa transactions -n martianbank
+```
+
+#### 8.3 Configure HPA for Customer-Auth Service
+```bash
+# Create HPA for customer-auth (fixed at 2 replicas, CPU target: 50%)
+kubectl autoscale deployment customer-auth -n martianbank \
+  --min=2 \
+  --max=2 \
+  --cpu=50%
+
+# Verify HPA creation
+kubectl get hpa customer-auth -n martianbank
+```
+
+#### 8.4 Update Existing HPA (if needed)
+If HPAs already exist and you need to modify them:
+```bash
+# Update transactions HPA max replicas
+kubectl patch hpa transactions -n martianbank -p '{"spec":{"maxReplicas":3}}'
+
+# Update transactions HPA min replicas
+kubectl patch hpa transactions -n martianbank -p '{"spec":{"minReplicas":1}}'
+
+# Update CPU threshold (use percentage format)
+kubectl patch hpa transactions -n martianbank -p '{"spec":{"metrics":[{"type":"Resource","resource":{"name":"cpu","target":{"type":"Utilization","averageUtilization":50}}}]}}'
+
+# Update customer-auth HPA (min and max to 2)
+kubectl patch hpa customer-auth -n martianbank -p '{"spec":{"minReplicas":2,"maxReplicas":2}}'
+```
+
+#### 8.5 Verify All HPAs
+```bash
+# List all HPAs
+kubectl get hpa -n martianbank
+
+# View detailed HPA status
+kubectl describe hpa transactions -n martianbank
+kubectl describe hpa customer-auth -n martianbank
+```
+
+**Note:** Other services (UI, Dashboard, Accounts, NGINX) run without HPA at fixed replica counts (1 replica each).
+
 ## Key Configuration Files
 
 ### ConfigMap (martianbank/templates/configmap.yaml)
@@ -150,16 +215,6 @@ data:
   LOAN_FUNCTION_URL: "https://REGION-PROJECT.cloudfunctions.net/loan-service"
   ATM_FUNCTION_URL: "https://REGION-PROJECT.cloudfunctions.net/atm-locator-service"
   JWT_SECRET: "your-secret-key"
-```
-
-### HPA Configuration
-```yaml
-# Enable in values.yaml
-autoscaling:
-  enabled: true
-  minReplicas: 1
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 70
 ```
 
 ## Cost Monitoring

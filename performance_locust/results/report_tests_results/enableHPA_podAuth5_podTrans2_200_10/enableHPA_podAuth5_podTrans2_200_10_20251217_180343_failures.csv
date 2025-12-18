@@ -1,0 +1,6 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Register User,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Register User'),15
+PUT,[Auth] Update Profile,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Update Profile'),1
+POST,[Auth] Login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Login'),4
+POST,[Auth] Register User,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 136.119.54.74 timed out. (connect timeout=None)')",85
+POST,[Transaction] View History,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] View History'),1

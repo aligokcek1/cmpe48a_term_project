@@ -1,0 +1,6 @@
+Method,Name,Error,Occurrences
+POST,[Auth] Re-login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Re-login'),1
+POST,[Auth] Register User,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Register User'),1
+PUT,[Auth] Update Profile,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Update Profile'),2
+POST,[Auth] Login,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Login'),10
+POST,[Auth] Logout,HTTPError('502 Server Error: Bad Gateway for url: [Auth] Logout'),1
