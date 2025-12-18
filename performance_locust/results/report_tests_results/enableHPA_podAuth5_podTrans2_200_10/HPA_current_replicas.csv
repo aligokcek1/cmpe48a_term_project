@@ -1,0 +1,15 @@
+TimeSeries ID,d79509e4-1366-45d8-b055-d02f0d7da78a-0-0,d79509e4-1366-45d8-b055-d02f0d7da78a-0-1,d79509e4-1366-45d8-b055-d02f0d7da78a-0-2,d79509e4-1366-45d8-b055-d02f0d7da78a-0-3,d79509e4-1366-45d8-b055-d02f0d7da78a-0-4,d79509e4-1366-45d8-b055-d02f0d7da78a-0-5
+horizontalpodautoscaler,accounts,customer-auth,dashboard,nginx,transactions,ui
+cluster,martianbank-cluster,martianbank-cluster,martianbank-cluster,martianbank-cluster,martianbank-cluster,martianbank-cluster
+location,us-central1-a,us-central1-a,us-central1-a,us-central1-a,us-central1-a,us-central1-a
+instance,kube-state-metrics-0:k8s-objects,kube-state-metrics-0:k8s-objects,kube-state-metrics-0:k8s-objects,kube-state-metrics-0:k8s-objects,kube-state-metrics-0:k8s-objects,kube-state-metrics-0:k8s-objects
+project_id,cmpe48a-term-project,cmpe48a-term-project,cmpe48a-term-project,cmpe48a-term-project,cmpe48a-term-project,cmpe48a-term-project
+namespace,martianbank,martianbank,martianbank,martianbank,martianbank,martianbank
+job,kube-state-metrics,kube-state-metrics,kube-state-metrics,kube-state-metrics,kube-state-metrics,kube-state-metrics
+Wed Dec 17 2025 18:03:00 GMT+0300 (GMT+03:00),1,1,1,1,1,1
+Wed Dec 17 2025 18:04:00 GMT+0300 (GMT+03:00),1,1,1,1,1,1
+Wed Dec 17 2025 18:05:00 GMT+0300 (GMT+03:00),1,3.5,1,1,1.5,1
+Wed Dec 17 2025 18:06:00 GMT+0300 (GMT+03:00),1,5,1,1,2,1
+Wed Dec 17 2025 18:07:00 GMT+0300 (GMT+03:00),1,5,1,1,2,1
+Wed Dec 17 2025 18:08:00 GMT+0300 (GMT+03:00),1,5,1,1,2,1
+Wed Dec 17 2025 18:09:00 GMT+0300 (GMT+03:00),1,5,1,1,2,1

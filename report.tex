@@ -1,0 +1,1027 @@
+\documentclass[11pt]{article}
+
+% --------- Packages ----------
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{caption}
+
+% --------- Listings ----------
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  rulecolor=\color{black!20},
+  backgroundcolor=\color{black!2},
+  showstringspaces=false
+}
+\lstset{style=code}
+
+% --------- Title ----------
+\title{Martian Bank - Technical Report\\\large CMPE 48A Term Project - Cloud-Native Architecture Implementation}
+\author{
+  \textbf{Team Members:} Ali Gökçek \;--\; Umut Şendağ\\
+  \textbf{Course:} CMPE 48A - Cloud Computing\\
+  \textbf{Platform:} Google Cloud Platform (GCP)\\
+  \textbf{GitHub Repository:} \url{https://github.com/aligokcek1/cmpe48a_term_project}\\
+  \textbf{Date:} December 2025
+}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =========================================================
+\section{Executive Summary}
+
+\subsection{Project Overview}
+Martian Bank is a cloud-native microservices banking application successfully deployed on Google Cloud Platform. The system demonstrates a hybrid architecture combining Kubernetes-managed microservices with serverless Cloud Functions, all backed by a MongoDB database running on Compute Engine.
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Objective:} Design, implement, and evaluate a cloud-native architecture integrating containerized workloads, virtual machines, and serverless functions
+  \item \textbf{Application:} Martian Bank - A microservices-based banking platform with user authentication, account management, transaction processing, loan applications, and ATM location services
+  \item \textbf{Cloud Platform:} Google Cloud Platform (GCP)
+  \item \textbf{Key Technologies:} Kubernetes (GKE), Compute Engine, Cloud Functions, MongoDB, NGINX, React, Node.js, Python/Flask
+\end{itemize}
+
+\subsection{Architecture Summary}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Containerized Workloads:} 6 microservices deployed on GKE (UI, Customer-Auth, Dashboard, Accounts, Transactions, NGINX)
+  \item \textbf{Virtual Machines:} MongoDB database on Compute Engine VM (e2-small: 2 vCPU, 2GB RAM)
+  \item \textbf{Serverless Functions:} 3 Cloud Functions for loan request, loan history, and ATM locator services
+  \item \textbf{Auto-scaling:} Selective HPA for transactions (1--3 replicas, CPU 50\%) and customer-auth (2--2 replicas, CPU 50\%)
+  \item \textbf{Load Balancing:} GCP Network Load Balancer (Layer 4) providing external access at \texttt{136.119.54.74:8080}
+  \item \textbf{Performance Testing:} Comprehensive Locust testing across multiple scenarios (20--500 users, various configurations)
+\end{itemize}
+
+% =========================================================
+\newpage
+\section{Cloud Architecture Diagram}
+
+\subsection{High-Level Architecture}
+
+\textbf{}
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{image.png}
+\end{figure}
+
+\textbf{Note:} A detailed Mermaid diagram is also available in \texttt{docs/FINAL\_DOCS/ARCHITECTURE\_DIAGRAM.md}.
+
+\textbf{Key Architecture Features:}
+\begin{itemize}[leftmargin=*]
+  \item NGINX acts as internal API gateway routing to microservices and Cloud Functions
+  \item Cloud Functions access MongoDB via VPC Connector (loan-connector)
+  \item All microservices communicate with MongoDB VM on internal network (\texttt{10.128.0.2:27017})
+  \item External access only through Load Balancer (\texttt{136.119.54.74:8080})
+  \item Selective HPA: Only transactions (1--3) and customer-auth (2--2) have auto-scaling enabled
+\end{itemize}
+
+\subsection{Infrastructure Components}
+
+\subsubsection{Google Kubernetes Engine (GKE)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Cluster Name:} martianbank-cluster
+  \item \textbf{Location:} us-central1-a
+  \item \textbf{Node Pool:} default-pool
+  \item \textbf{Machine Type:} e2-medium (2 vCPU, 4GB RAM per node)
+  \item \textbf{Node Count:} 3 (auto-scaling disabled, fixed 3 nodes)
+  \item \textbf{Total Capacity:} 6 vCPUs total (\(\sim\)2.8 vCPUs allocatable), 12GB RAM total (\(\sim\)9GB allocatable)
+  \item \textbf{Disk Size:} 40GB per node (pd-balanced)
+  \item \textbf{Auto-repair:} Enabled
+  \item \textbf{Auto-upgrade:} Enabled
+\end{itemize}
+
+\subsubsection{Compute Engine VM}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Instance Name:} mongodb-vm
+  \item \textbf{Machine Type:} e2-small (2 vCPU, 2GB RAM)
+  \item \textbf{Purpose:} MongoDB database server
+  \item \textbf{Network Configuration:} Internal IP \texttt{10.128.0.2:27017} (no external IP)
+  \item \textbf{Firewall Rules:} Accepts connections from GKE cluster (\texttt{10.12.0.0/14})
+  \item \textbf{OS:} Ubuntu 22.04 LTS
+\end{itemize}
+
+\subsubsection{Cloud Functions}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Function 1:} loan-request (Python 3.11, HTTP trigger, loan application processing)
+  \item \textbf{Function 2:} loan-history (Python 3.11, HTTP trigger, loan history retrieval)
+  \item \textbf{Function 3:} atm-locator-service (Node.js 18, HTTP trigger, ATM location search)
+  \item \textbf{VPC Connector:} loan-connector (us-central1, enables MongoDB VM access)
+  \item \textbf{Region:} us-central1
+\end{itemize}
+
+\subsubsection{Load Balancer}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Type:} Network Load Balancer (Layer 4)
+  \item \textbf{External IP:} 136.119.54.74
+  \item \textbf{Port:} 8080
+  \item \textbf{Protocol:} HTTP
+  \item \textbf{Backend:} NGINX pods in GKE cluster
+\end{itemize}
+
+% =========================================================
+\section{Component Description and Interactions}
+
+\subsection{Microservices Overview}
+\begin{center}
+\begin{tabular}{@{}p{2cm}p{3.5cm}p{1.3cm}p{1.4cm}p{2.8cm}p{4.3cm}@{}}
+\toprule
+\textbf{Service} & \textbf{Technology} & \textbf{Port} & \textbf{Replicas} & \textbf{HPA} & \textbf{Purpose} \\
+\midrule
+UI & React + Redux Toolkit & 3000 & 1 & No & Frontend user interface \\
+Customer-Auth & Node.js + Express & 8000 & 2 & 2--2 (50\%CPU) & Authentication \& authorization \\
+Dashboard & Python + Flask & 5000 & 1 & No & Orchestration layer for Accounts/Transactions \\
+Accounts & Python + Flask + gRPC & 50051 & 1 & No & Account management (HTTP/gRPC) \\
+Transactions & Python + Flask + gRPC & 50052 & 1--3 & 1--3 (50\% CPU) & Transaction processing (HTTP/gRPC) \\
+NGINX & NGINX & 8080 & 1 & No & Internal API Gateway / Reverse Proxy \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Common Resources:} CPU 100m--500m, Memory 128Mi--512Mi (NGINX: CPU 50m--200m, Memory 64Mi--256Mi)
+
+\textbf{NGINX Routing:}
+\begin{itemize}[leftmargin=*]
+  \item \texttt{/} \(\rightarrow\) UI (3000)
+  \item \texttt{/api/users} \(\rightarrow\) Customer-Auth (8000)
+  \item \texttt{/api/account} \(\rightarrow\) Dashboard (5000)
+  \item \texttt{/api/transaction} \(\rightarrow\) Dashboard (5000)
+  \item \texttt{/api/loan} \(\rightarrow\) Cloud Function (loan-request)
+  \item \texttt{/api/loanhistory} \(\rightarrow\) Cloud Function (loan-history)
+  \item \texttt{/api/atm} \(\rightarrow\) Cloud Function (atm-locator-service)
+\end{itemize}
+
+\subsection{Database Component}
+\textbf{MongoDB on Compute Engine:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{VM:} e2-small (2 vCPU, 2GB RAM), Internal IP: \texttt{10.128.0.2:27017}
+  \item \textbf{Database:} bank (collections: users, accounts, transactions, loans, atms - 13 ATM records)
+  \item \textbf{Access:} Internal only, authenticated (root user), firewall allows GKE cluster (\texttt{10.12.0.0/14})
+\end{itemize}
+
+\subsection{Serverless Functions}
+\begin{center}
+\begin{tabular}{@{}p{3.6cm}p{2.4cm}p{5.5cm}p{3.7cm}@{}}
+\toprule
+\textbf{Function} & \textbf{Runtime} & \textbf{URL} & \textbf{Purpose} \\
+\midrule
+loan-request & Python 3.11 & \url{https://loan-request-gcb4q3froa-uc.a.run.app} & Process loan applications \\
+loan-history & Python 3.11 & \url{https://loan-history-gcb4q3froa-uc.a.run.app} & Retrieve loan history \\
+atm-locator-service & Node.js 18 & \url{https://atm-locator-service-gcb4q3froa-uc.a.run.app} & Search ATMs \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Common Configuration:} VPC Connector (loan-connector), MongoDB connection via VPC
+
+% =========================================================
+\section{Deployment Process}
+
+\subsection{Prerequisites}
+\begin{itemize}[leftmargin=*]
+  \item GCP account with \$300 free trial credits
+  \item \texttt{gcloud} CLI installed and authenticated
+  \item \texttt{kubectl} installed
+  \item \texttt{helm} installed
+  \item \texttt{docker} installed (optional, for local testing)
+  \item Basic knowledge of Kubernetes, GCP, and microservices
+\end{itemize}
+
+\subsection{Infrastructure Setup}
+
+\subsubsection{GCP Project Setup}
+\begin{lstlisting}[language=bash,caption={GCP project setup}]
+# Set project
+gcloud config set project YOUR_PROJECT_ID
+
+# Enable required APIs
+gcloud services enable container.googleapis.com
+gcloud services enable compute.googleapis.com
+gcloud services enable cloudfunctions.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
+\end{lstlisting}
+
+\subsubsection{MongoDB VM Setup}
+\begin{lstlisting}[language=bash,caption={MongoDB VM setup}]
+# Create VM
+gcloud compute instances create mongodb-vm \
+  --zone=us-central1-a \
+  --machine-type=e2-small \
+  --image-family=ubuntu-2204-lts \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=40GB
+
+# SSH into VM and install MongoDB
+gcloud compute ssh mongodb-vm --zone=us-central1-a
+# [Follow MongoDB installation steps]
+\end{lstlisting}
+
+\textbf{Steps:}
+\begin{enumerate}[leftmargin=*]
+  \item SSH into VM
+  \item Update system packages
+  \item Install MongoDB Community Edition
+  \item Configure MongoDB for network access
+  \item Set up authentication (create root user)
+  \item Configure firewall rules
+  \item Test connectivity
+\end{enumerate}
+
+\subsubsection{GKE Cluster Setup}
+\begin{lstlisting}[language=bash,caption={GKE cluster setup}]
+# Create cluster
+gcloud container clusters create martianbank-cluster \
+  --zone=us-central1-a \
+  --num-nodes=3 \
+  --machine-type=e2-medium \
+  --disk-size=40GB
+
+# Get credentials
+gcloud container clusters get-credentials martianbank-cluster --zone=us-central1-a
+\end{lstlisting}
+
+\textbf{Configuration:}
+\begin{itemize}[leftmargin=*]
+  \item Cluster name: martianbank-cluster
+  \item Zone: us-central1-a
+  \item Node count: 3 (fixed)
+  \item Machine type: e2-medium (2 vCPU, 4GB RAM each)
+  \item Disk size: 40GB per node (pd-balanced)
+  \item Auto-scaling: Disabled (fixed 3 nodes)
+\end{itemize}
+
+\subsection{Application Deployment}
+
+\subsubsection{Container Image Building}
+\begin{lstlisting}[language=bash,caption={Container image build (placeholder)}]
+# Set project ID
+export PROJECT_ID=YOUR_PROJECT_ID
+
+# Build and push images (using GCP Cloud Build)
+# [Describe your image building process]
+\end{lstlisting}
+
+\textbf{Images Built:}
+\begin{itemize}[leftmargin=*]
+  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-ui:latest}
+  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-customer-auth:v2}
+  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-dashboard:latest}
+  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-accounts:latest}
+  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-transactions:v2}
+  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-nginx:latest}
+\end{itemize}
+
+\textbf{Note:} Images are built using GCP Cloud Build for \texttt{linux/amd64} platform.
+
+\subsubsection{Cloud Functions Deployment}
+\begin{lstlisting}[language=bash,caption={Cloud Functions deployment example}]
+# Deploy Loan Function
+cd cloud-functions/loan
+gcloud functions deploy loan-request \
+  --gen2 \
+  --runtime=python311 \
+  --region=us-central1 \
+  --source=. \
+  --entry-point=process_loan_request \
+  --trigger-http \
+  --allow-unauthenticated \
+  --vpc-connector=loan-connector \
+  --set-env-vars="DB_URL=mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin"
+
+# [Repeat for other functions]
+\end{lstlisting}
+
+\textbf{Functions Deployed:}
+\begin{itemize}[leftmargin=*]
+  \item loan-request: \url{https://loan-request-gcb4q3froa-uc.a.run.app}
+  \item loan-history: \url{https://loan-history-gcb4q3froa-uc.a.run.app}
+  \item atm-locator-service: \url{https://atm-locator-service-gcb4q3froa-uc.a.run.app}
+\end{itemize}
+
+\textbf{VPC Connector Setup:}
+\begin{lstlisting}[language=bash,caption={VPC connector setup}]
+# Create VPC Connector (if not exists)
+gcloud compute networks vpc-access connectors create loan-connector \
+  --region=us-central1 \
+  --subnet=default \
+  --subnet-project=cmpe48a-term-project \
+  --min-instances=2 \
+  --max-instances=3
+\end{lstlisting}
+
+\subsubsection{Kubernetes Deployment}
+\begin{lstlisting}[language=bash,caption={Kubernetes deployment with Helm}]
+# Create namespace
+kubectl create namespace martianbank
+
+# Create ConfigMap
+kubectl create configmap configmap-martianbank \
+  --from-literal=DB_URL="mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin" \
+  --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
+  --namespace=martianbank
+
+# Deploy with Helm
+helm install martianbank ./martianbank \
+  --namespace martianbank \
+  --set SERVICE_PROTOCOL=http \
+  --set DB_URL="mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin" \
+  --set imageRegistry="gcr.io/$PROJECT_ID" \
+  --set mongodb.enabled=false \
+  --set nginx.enabled=true
+\end{lstlisting}
+
+\subsubsection{HPA Configuration}
+\begin{lstlisting}[language=bash,caption={Manual HPA configuration}]
+# Install metrics server (if not already installed)
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+# Create HPA for Transactions Service
+kubectl autoscale deployment transactions -n martianbank \
+  --min=1 \
+  --max=3 \
+  --cpu=50%
+
+# Create HPA for Customer-Auth Service
+kubectl autoscale deployment customer-auth -n martianbank \
+  --min=2 \
+  --max=2 \
+  --cpu=50%
+
+# Verify HPAs
+kubectl get hpa -n martianbank
+\end{lstlisting}
+
+\textbf{Note:} HPAs are manually configured using \texttt{kubectl} commands, not via Helm charts.
+
+\subsubsection{Load Balancer Configuration}
+\begin{lstlisting}[language=bash,caption={Load Balancer external IP}]
+# Check service status
+kubectl get service nginx -n martianbank
+
+# Wait for external IP assignment
+kubectl get service nginx -n martianbank -w
+\end{lstlisting}
+
+\textbf{Result:} External IP assigned: \texttt{136.119.54.74:8080}\\
+\textbf{Application URL:} \url{http://136.119.54.74:8080}
+
+\subsection{Database Population}
+\begin{lstlisting}[language=bash,caption={Database population example}]
+# Populate MongoDB with test data
+./scripts/populate_atms_mongosh.sh PASSWORD
+
+# Verify data
+# [Commands to verify database contents]
+\end{lstlisting}
+
+\subsection{Verification Steps}
+
+\textbf{1. Check Pod Status:}
+\begin{lstlisting}[language=bash]
+kubectl get pods -n martianbank
+# Expected: All 6 pods in Running state
+\end{lstlisting}
+
+\textbf{2. Verify Services:}
+\begin{lstlisting}[language=bash]
+kubectl get services -n martianbank
+# Expected: nginx service with EXTERNAL-IP assigned (136.119.54.74)
+\end{lstlisting}
+
+\textbf{3. Test Endpoints:}
+\begin{lstlisting}[language=bash]
+# Test UI
+curl http://136.119.54.74:8080/
+
+# Test authentication
+curl -X POST http://136.119.54.74:8080/api/users/auth \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password"}'
+
+# Test ATM locator
+curl -X POST http://136.119.54.74:8080/api/atm \
+  -H "Content-Type: application/json" \
+  -d '{}'
+\end{lstlisting}
+
+\textbf{4. Check Cloud Functions:}
+\begin{lstlisting}[language=bash]
+# Test loan request
+curl -X POST https://loan-request-gcb4q3froa-uc.a.run.app \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test","email":"test@example.com",...}'
+
+# Test ATM locator
+curl -X POST https://atm-locator-service-gcb4q3froa-uc.a.run.app/api/atm \
+  -H "Content-Type: application/json" \
+  -d '{}'
+\end{lstlisting}
+
+\textbf{5. Verify Database Connectivity:}
+\begin{lstlisting}[language=bash]
+# Test MongoDB connection from a pod
+kubectl run -it --rm mongo-test --image=mongo:latest --restart=Never -n martianbank -- \
+  mongosh "mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin"
+\end{lstlisting}
+
+\textbf{6. Verify HPAs:}
+\begin{lstlisting}[language=bash]
+kubectl get hpa -n martianbank
+# Expected: transactions and customer-auth HPAs active
+\end{lstlisting}
+
+% =========================================================
+\section{Locust Experiment Design}
+
+\subsection{Testing Framework}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Tool:} Locust
+  \item \textbf{Purpose:} Simulate realistic user behavior and generate traffic
+  \item \textbf{Test Duration:} 5 minutes per scenario
+  \item \textbf{Metrics Collected:} RPS, average response time, error rates, resource utilization, number of replicas
+\end{itemize}
+
+\subsection{Test Design}
+\textbf{Test Approach:} Performance testing uses \texttt{comprehensive\_system\_test.py} to simulate complete user journeys through the Martian Bank system. Tests are executed via \texttt{run\_custom\_simulation.py} wrapper script with interactive or command-line configuration.
+
+\textbf{User Journey:} Registration \(\rightarrow\) Login \(\rightarrow\) Account Creation \(\rightarrow\) Account Viewing \(\rightarrow\) Transactions \(\rightarrow\) Transaction History \(\rightarrow\) ATM Search \(\rightarrow\) Loan Application \(\rightarrow\) Loan History \(\rightarrow\) Profile Updates \(\rightarrow\) Session Management
+
+\textbf{Task Weights:} \texttt{view\_account\_details} (20), \texttt{view\_all\_accounts} (15), \texttt{check\_transaction\_history} (12), \texttt{internal\_transfer} (10), \texttt{search\_atm\_locations} (5), \texttt{check\_loan\_history} (4), \texttt{apply\_for\_loan} (3), \texttt{update\_profile} (2), \texttt{logout\_and\_login} (1)
+
+\textbf{Components Tested:} Customer-Auth (GKE), Accounts (GKE), Transactions (GKE), Loan Services (Cloud Function), ATM Locator (Cloud Function), NGINX Load Balancer, MongoDB VM
+
+\textbf{User Personas:} Casual Banking User (70\%, 5--15s wait), Heavy Transaction User (30\%, 1--3s wait)
+
+\subsection{Example Test Execution Scripts}
+
+\textbf{Interactive Mode:}
+\begin{lstlisting}[language=bash]
+cd performance_locust
+python run_custom_simulation.py
+\end{lstlisting}
+
+\textbf{Command-Line Mode:}
+\begin{lstlisting}[language=bash]
+cd performance_locust
+python run_custom_simulation.py \
+  --users 200 \
+  --spawn-rate 10 \
+  --duration 5m \
+  --name baseline_test
+\end{lstlisting}
+
+\textbf{Results:} Saved to \texttt{performance\_locust/results/[test\_name]/} as HTML reports and CSV files (\texttt{*\_stats.csv}, \texttt{*\_stats\_history.csv}, \texttt{*\_failures.csv})
+
+\subsection{Independent Variables}
+The following independent variables were identified and tested:
+
+\begin{longtable}{@{}p{3.5cm}p{5cm}p{7.0cm}@{}}
+\toprule
+\textbf{Variable} & \textbf{Values Tested} & \textbf{Description} \\
+\midrule
+\endhead
+Concurrent Users & 20, 50, 200, 500 & Number of simultaneous users \\
+Spawn Rate & 5, 10, 20 users/second & Rate at which users are spawned (ramp-up speed) \\
+Test Duration & 5 minutes & Duration of each test scenario \\
+HPA CPU Threshold & 50\%, 70\% & CPU utilization threshold for auto-scaling \\
+HPA Min/Max Replicas & Various (1--1, 1--2, 1--3, 1--5, 1--10, 2--2) & HPA scaling range for different services \\
+VM Resources & e2-small (2 vCPU, 2GB), e2-custom-6-8192 (6 vCPU, 8GB) & MongoDB VM machine type \\
+Node Autoscaling & Enabled/Disabled & GKE cluster node auto-scaling \\
+DB Pool Size & Default (100), 200 & MongoDB connection pool size \\
+bcrypt Salt Rounds & 8, 10 & Password hashing computational cost \\
+\bottomrule
+\end{longtable}
+
+\textbf{Initial Configuration (Baseline):}
+\begin{itemize}[leftmargin=*]
+  \item VM: e2-small (2 vCPU, 2GB RAM)
+  \item DB pool size: Default (100)
+  \item Hashing auth (bcrypt): 10 rounds
+  \item HPA min/max: 1/1 (no HPA initially)
+  \item Node autoscaling: Off
+  \item HPA CPU threshold: 70\%
+\end{itemize}
+
+\subsection{Dependent Variables}
+\begin{center}
+\begin{tabular}{@{}p{3.4cm}p{6.3cm}p{2.0cm}@{}}
+\toprule
+\textbf{Variable} & \textbf{Metric} & \textbf{Unit} \\
+\midrule
+Response Time & p50, p95, p99 latency & ms \\
+Throughput & Requests per second & RPS \\
+Error Rate & Percentage of failed requests & \% \\
+CPU Utilization & Average CPU usage & \% \\
+Memory Utilization & Average memory usage & \% \\
+Pod Scaling Events & Number of replicas over time & count \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Test Scenarios}
+Multiple experiments were conducted by changing \textbf{one major factor at a time} (ramp-up rate, HPA settings, VM resources, cluster autoscaling, bcrypt cost, DB pool size), while keeping the rest of the system configuration stable. Scenario names follow the convention \texttt{[phase]\_[users]\_[spawn\_rate]} (e.g., \texttt{initial\_200\_10}).
+
+\subsubsection{Experiment 1: Reduce ramp-up (baseline comparison)}
+\textbf{Scenarios:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{initial\_200\_10:} 200 users, 10 users/sec (initial baseline)
+  \item \textbf{initial\_200\_5:} 200 users, 5 users/sec (\textbf{only change:} ramp-up 10 $\rightarrow$ 5)
+\end{itemize}
+
+\textbf{Results:}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Throughput (RPS):} 12.56 $\rightarrow$ 12.63 (nearly unchanged)
+  \item \textbf{Overall failure rate:} 16.18\% $\rightarrow$ 12.76\% (improved with slower ramp-up)
+  \item \textbf{Latency:} Median (p50) 220ms $\rightarrow$ 210ms; aggregated p95 = 60{,}000ms in both runs (severe long-tail)
+  \item \textbf{Primary failure source (Transactions):}
+    \begin{itemize}[leftmargin=*]
+      \item Internal Transfer failures: 80.44\% (292/363) $\rightarrow$ 69.06\% (212/307)
+      \item Transaction History failures: 66.52\% (292/439) $\rightarrow$ 65.84\% (266/404)
+    \end{itemize}
+  \item \textbf{Auth behavior:} Login remains very slow (avg 38.84s $\rightarrow$ 35.74s); Register failures improved 11.50\% (23/200) $\rightarrow$ 2.00\% (4/200)
+\end{itemize}
+
+\subsubsection*{HPA Experiments}
+\subsubsection{Experiment 2: Enable HPA (baseline ramp-up)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Changes vs initial:}
+    \begin{itemize}[leftmargin=*]
+      \item Customer-auth HPA: min 1, max 5
+      \item Transactions HPA: min 1, max 2
+    \end{itemize}
+  \item \textbf{Results \& inferences:}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{System stability improved significantly:} throughput increased and overall failure rate dropped sharply vs \texttt{initial\_200\_10}; transaction-related failures were largely eliminated.
+      \item \textbf{Auth improved but shifted the bottleneck:} login latency improved substantially, while \textbf{registration became the dominant issue} (high failures / long tail), indicating the critical path is not solved purely by adding auth replicas.
+      \item \textbf{HPA cannot fully match fast ramp-up:} in the first $\sim$1--2 minutes, existing pods absorb the burst while HPA reacts, causing a brief failures/s spike and elevated p95 before replicas reach their maxima.
+      \item \textbf{Practical takeaway:} for bursty ramp-up, we will test higher auth \texttt{minReplicas} and slower spawn rate; CPU-based HPA is reactive and will always lag initial spikes.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{initial_200_10.png}
+    \caption*{\textbf{Initial (no HPA):} \texttt{initial\_200\_10}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{enableHPA_200_10.png}
+    \caption*{\textbf{Enable HPA:} \texttt{HPA\_enabled\_200\_10}}
+  \end{minipage}
+  \caption{Experiment 2 graph comparison.}
+  \label{fig:exp2_hpa_vs_initial}
+\end{figure}
+\newpage
+\subsubsection{Experiment 2.1: Enable HPA with Reduced Ramp-up}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_5}
+  \item \textbf{Changes vs Experiment 2:} \textbf{only} spawn rate reduced (\texttt{200\_10} $\rightarrow$ \texttt{200\_5}); HPA settings unchanged.
+  \item \textbf{Results \& inferences (vs \texttt{enableHPA\_podAuth5\_podTrans2\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput increased:} aggregated \textbf{RPS} 16.69 $\rightarrow$ 20.51.
+      \item \textbf{Overall reliability worsened:} failure rate \textbf{2.13\%} $\rightarrow$ \textbf{15.9\%}, driven by \textbf{Transactions} (Internal Transfer and View History timeouts/failures).
+      \item \textbf{Auth registration improved:} Register failures \textbf{50\%} $\rightarrow$ \textbf{7.5\%}, consistent with giving HPA more time to scale during ramp-up.
+      \item \textbf{Ramp-up is not the only limiter:} despite reaching max replicas, \textbf{transaction failures persisted} and tail latency remained unstable, pointing to a backend constraint (e.g., DB/connection pool/timeouts) and/or \texttt{maxReplicas=2} being insufficient under sustained load.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{enableHPA_200_10.png}
+    \caption*{\textbf{HPA, baseline ramp-up:} \texttt{200\_10}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{hpa_enabled_200_5.png}
+    \caption*{\textbf{HPA, reduced ramp-up:} \texttt{200\_5}}
+  \end{minipage}
+  \caption{Experiment 2.1: impact of slower ramp-up under identical HPA settings.}
+  \label{fig:exp21_hpa_ramp_compare}
+\end{figure}
+\newpage
+\subsubsection{Experiment 2.2: Enable HPA with Lower CPU Target}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Change vs Experiment 2:} HPA target CPU utilization \textbf{70\% $\rightarrow$ 50\%} (more aggressive scaling); min/max replicas unchanged.
+  \item \textbf{Results \& inferences (vs \texttt{enableHPA\_podAuth5\_podTrans2\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Apparent throughput increased:} aggregated \textbf{RPS} 16.69 $\rightarrow$ 19.79, but this includes failed requests (not a pure win).
+      \item \textbf{Reliability degraded sharply:} failure rate \textbf{2.13\% $\rightarrow$ 16.69\%}.
+      \item \textbf{Regression concentrated in Transactions:} Internal Transfer failures 0/604 $\rightarrow$ 543/690; View History failures 1/739 $\rightarrow$ 413/757.
+      \item \textbf{Auth registration improved (still slow):} Register failures 50\% $\rightarrow$ 11\%, consistent with earlier auth scaling (3.5 pods vs 5 pods) under burst.
+      \item \textbf{Main takeaway:} lowering CPU target triggers earlier scaling, but \textbf{does not resolve the bottleneck}; transaction failures persist after scaling, pointing to a backend limit (e.g., DB/connection pool/timeouts) and/or insufficient transaction capacity at \texttt{maxReplicas=2}.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{enableHPA_200_10.png}
+    \caption*{\textbf{CPU target 70\%:} Experiment 2}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{enable_hpa_target_50_200_10.png}
+    \caption*{\textbf{CPU target 50\%:} Experiment 2.2}
+  \end{minipage}
+  \caption{Experiment 2.2: lowering HPA CPU target.}
+  \label{fig:exp22_hpa_target_compare}
+\end{figure}
+\newpage
+
+\subsubsection*{Infrastructure Optimization Experiments}
+\subsubsection{Experiment 3: Increase VM Resources (MongoDB)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Change vs initial:} MongoDB VM upgraded from \texttt{e2-small} (2 vCPU, 2GB) to \texttt{e2-custom-6-8192} (6 vCPU, 8GB).
+  \item \textbf{Results \& inferences (vs \texttt{initial\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput improved:} aggregated \textbf{RPS} 12.56 $\rightarrow$ 15.94.
+      \item \textbf{Failure rate changed little:} 16.18\% $\rightarrow$ 15.90\% (minor improvement).
+      \item \textbf{Latency improved:} aggregated avg 9.53s $\rightarrow$ 6.97s; median 220ms $\rightarrow$ 200ms; p95 60s $\rightarrow$ 53s (long-tail remains severe).
+      \item \textbf{Transactions still dominate failures:} Internal Transfer $\approx$80\% failures and View History $\approx$66\% failures in both runs, although average transaction latency decreased.
+      \item \textbf{VM utilization indicates the DB VM was not saturated:} initial VM peaked at \textbf{$\sim$19\% CPU / $\sim$84\% memory}, while the upgraded VM peaked at only \textbf{$\sim$4\% CPU / $\sim$24\% memory}. Therefore, increasing VM resources had a bounded effect; persistent failures likely come from constraints outside raw VM CPU/memory (e.g., timeouts/connection handling/application-level bottlenecks).
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{vm_resource_200_10_initial.png}
+    \caption*{\textbf{Initial VM (2 vCPU, 2GB):} peak $\sim$19\% CPU, $\sim$84\% memory}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{vm_resource_increase_200_10.png}
+    \caption*{\textbf{Upgraded VM (6 vCPU, 8GB):} peak $\sim$4\% CPU, $\sim$24\% memory}
+  \end{minipage}
+  \caption{Experiment 3: VM resource utilization comparison.}
+  \label{fig:exp3_vm_resource_compare}
+\end{figure}
+\newpage
+
+\subsubsection{Experiment 4: Enable GKE node autoscaling}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Changes vs initial:} Cluster node autoscaling enabled
+  \item \textbf{Results \& inferences (vs \texttt{initial\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput improved:} aggregated \textbf{RPS} 12.56 $\rightarrow$ 15.86.
+      \item \textbf{Failure rate improved slightly:} 16.18\% $\rightarrow$ 15.66\% (still high).
+      \item \textbf{Latency improved moderately:} aggregated avg 9.53s $\rightarrow$ 6.81s; median 220ms $\rightarrow$ 200ms; p95 60s $\rightarrow$ 43s (long-tail persists).
+      \item \textbf{Transactions still dominate failures:} Internal Transfer failures 292/363 $\rightarrow$ 382/450; View History failures 292/439 $\rightarrow$ 356/554.
+      \item \textbf{Cluster utilization stayed low:} peak \textbf{$\sim$21\% CPU} and \textbf{$\sim$40\% memory}, so autoscaling likely did not materially increase effective capacity; the bottleneck appears to be application/backend constraints rather than node resources.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\linewidth]{cluster_Res_200_10_init.png}
+  \caption{Experiment 4: Cluster resource utilization during \texttt{initial\_200\_10} with no-node autoscaling.}
+  \label{fig:exp4_cluster_resource}
+\end{figure}
+\newpage
+
+\subsubsection*{Application-Level Performance Optimizations (5.x Series)}
+\subsubsection{Experiment 5: Reduce bcrypt cost factor (10 $\rightarrow$ 8)}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Changes vs initial:} bcrypt rounds in customer-auth reduced from \textbf{10} to \textbf{8}.
+  \item \textbf{Results \& inferences (vs \texttt{initial\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Auth became dramatically faster and more reliable:}
+        Login avg \textbf{38.84s $\rightarrow$ 5.16s} (median 42s $\rightarrow$ 5.2s);
+        Register failures \textbf{11.5\% $\rightarrow$ 0\%} and Register avg \textbf{48.0s $\rightarrow$ 8.24s}.
+      \item \textbf{Auth CPU pressure dropped:} customer-auth CPU request utilization peak decreased from about \textbf{4.85} (baseline) to about \textbf{2.40} (bcrypt=8), indicating bcrypt was a significant CPU bottleneck.
+      \item \textbf{System-level reliability did not improve:} aggregated failure rate increased (607/3753 $\rightarrow$ 1123/5677), with failures dominated by \textbf{Transactions}
+        (Internal Transfer 292/363 $\rightarrow$ 586/622; View History 292/439 $\rightarrow$ 537/733).
+      \item \textbf{Key takeaway:} reducing bcrypt rounds fixes the \textbf{authentication bottleneck}, but the end-to-end bottleneck shifts to \textbf{transaction/database/timeout constraints}; faster auth likely increases downstream pressure on Transactions.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{cpu_util_auth_200_10.png}
+    \caption*{\textbf{Baseline auth CPU:} \texttt{initial\_200\_10 \%485 at max}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{cpu_util_bcrypt.png}
+    \caption*{\textbf{bcrypt=8 auth CPU:} \texttt{bcrypt\_8\_200\_10 \%239 at max}}
+  \end{minipage}
+  \caption{Experiment 5: customer-auth CPU request utilization comparison.}
+  \label{fig:exp5_bcrypt_cpu_compare}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{initial_200_10.png}
+    \caption*{\textbf{Baseline Locust:} \texttt{initial\_200\_10}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{locust_bcrypt.png}
+    \caption*{\textbf{bcrypt=8 Locust:} \texttt{bcrypt\_8\_200\_10}}
+  \end{minipage}
+  \caption{Experiment 5: Locust performance graphs comparison.}
+  \label{fig:exp5_bcrypt_locust_compare}
+\end{figure}
+
+\subsubsection{Experiment 5.1: Increase Transactions DB connection pool size}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Change:} Transactions service DB pool size increased to \textbf{200}.
+  \item \textbf{Results \& inferences (vs \texttt{bcrypt\_8\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput increased:} aggregated \textbf{RPS} 12.56 $\rightarrow$ 17.83.
+      \item \textbf{Overall reliability worsened:} failure rate 16.18\% (607/3753) $\rightarrow$ 19.31\% (1029/5330).
+      \item \textbf{Transactions regressed significantly:} Internal Transfer failures 292/363 $\rightarrow$ 521/547; View History failures 292/439 $\rightarrow$ 508/672.
+      \item \textbf{Auth is not the limiter in this run:} Login avg 38.84s $\rightarrow$ 6.51s; Register failures 11.5\% $\rightarrow$ 0\%.
+      \item \textbf{Key takeaway:} increasing the Transactions DB pool size alone did \emph{not} resolve the bottleneck; transaction failures remained dominant (and higher), suggesting constraints such as DB contention/timeouts/transaction-service behavior. Higher end-to-end throughput may also amplify downstream pressure on Transactions. So, we revert the pool size increment.
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Experiment 5.2: Final HPA tuning for Transactions}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Notes/Resets:} DB pool size reset to initial; bcrypt kept at 8
+  \item \textbf{Changes:} Transactions HPA max replicas set to 3
+  \item \textbf{Results \& inferences (vs \texttt{bcrypt\_8\_200\_10}):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput increased strongly:} aggregated \textbf{RPS} 19.01 $\rightarrow$ 28.70.
+      \item \textbf{Reliability improved:} aggregated failure rate \textbf{19.78\%} (1123/5677) $\rightarrow$ \textbf{10.84\%} (929/8573).
+      \item \textbf{Transactions improved materially:}
+        Internal Transfer failures \textbf{94.2\%} (586/622) $\rightarrow$ \textbf{55.8\%} (558/1000);
+        View History failures \textbf{73.3\%} (537/733) $\rightarrow$ \textbf{29.8\%} (371/1243).
+      \item \textbf{Latency improved:} aggregated avg \textbf{5.50s $\rightarrow$ 1.87s}; tail improved (p95 \textbf{42s $\rightarrow$ 10s}, p99 \textbf{60s $\rightarrow$ 20s}).
+      \item \textbf{Auth remained healthy (bcrypt=8):} login stayed fast (avg 5.16s $\rightarrow$ 7.72s) and register stayed at 0\% failures.
+      \item \textbf{Key takeaway:} increasing Transactions scaling headroom (\texttt{maxReplicas=3}) reduces the dominant bottleneck (transaction timeouts/failures) and improves end-to-end throughput/latency, but failures are still non-trivial, motivating further tuning (e.g., min replicas/CPU target).
+    \end{itemize}
+\end{itemize}
+
+\newpage
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{locust_bcrypt.png}
+    \caption*{\textbf{Baseline (bcrypt=8):} \texttt{bcrypt\_8\_200\_10}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{transHPAmax3_bcrypt.png}
+    \caption*{\textbf{Tuned Transactions HPA:} \texttt{maxReplicas=3}}
+  \end{minipage}
+  \caption{Experiment 5.2: Locust graph comparison.}
+  \label{fig:exp52_trans_hpa_max3_compare}
+\end{figure}
+
+\subsubsection{Experiment 5.2.1: Adjust auth HPA max and lower HPA CPU target}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Changes vs 5.2:} HPA CPU target 70\% $\rightarrow$ 50\% and customer-auth HPA max set to 2
+  \item \textbf{Results \& inferences (vs Experiment 5.2):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput increased:} aggregated \textbf{RPS} 28.70 $\rightarrow$ 36.16.
+      \item \textbf{Failures nearly eliminated:} failure rate \textbf{10.84\%} (929/8573) $\rightarrow$ \textbf{0.09\%} (10/10791).
+      \item \textbf{Latency improved dramatically:} aggregated avg \textbf{1.87s $\rightarrow$ 0.36s}; p95 \textbf{10s $\rightarrow$ 0.45s}; median \textbf{200ms $\rightarrow$ 170ms}.
+      \item \textbf{Transactions stabilized:}
+        Internal Transfer failures \textbf{55.8\%} (558/1000) $\rightarrow$ \textbf{0.22\%} (3/1340);
+        View History failures \textbf{29.8\%} (371/1243) $\rightarrow$ \textbf{0.19\%} (3/1595).
+      \item \textbf{Auth remained acceptable under max=2:} only \textbf{1} login failure; register had \textbf{0} failures (still multi-second latency, but no longer causing systemic errors).
+      \item \textbf{Key takeaway:} lowering the CPU target (more responsive scaling) and capping auth to 2 did \emph{not} reduce performance; instead, the system became \textbf{stable at 200\_10} with near-zero errors. This indicates the previous failures were not primarily due to insufficient auth replicas, and that the dominant transaction instability can be mitigated under the tuned HPA behavior.
+    \end{itemize}
+\end{itemize}
+\newpage
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{transHPAmax3_bcrypt.png}
+    \caption*{\textbf{Experiment 5.2:} Transactions max=3, CPU target 70\%}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{trans3_auth2_target50_bcrypt.png}
+    \caption*{\textbf{Experiment 5.2.1:} Auth max=2, Transactions max=3, CPU target 50\%}
+  \end{minipage}
+  \caption{Experiment 5.2 vs 5.2.1: Locust graph comparison.}
+  \label{fig:exp521_compare}
+\end{figure}
+
+
+\subsubsection{Experiment 5.2.2: Fix auth minimum replicas}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{200\_10}
+  \item \textbf{Changes vs 5.2.1:} Customer-auth HPA min set to 2
+  \item \textbf{Results \& inferences (vs Experiment 5.2.1):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput increased slightly:} aggregated \textbf{RPS} 36.16 $\rightarrow$ 37.31.
+      \item \textbf{Failures stayed near-zero:} 10/10791 $\rightarrow$ 9/11134 (both \textbf{$\approx$0.1\%}).
+      \item \textbf{Latency improved substantially:} aggregated avg \textbf{362ms $\rightarrow$ 194ms}; p95 \textbf{450ms $\rightarrow$ 240ms}.
+      \item \textbf{Auth became consistently and significantly fast:} Login avg \textbf{3.68s $\rightarrow$ 454ms}; Register avg \textbf{6.14s $\rightarrow$ 830ms} (0 failures in both).
+      \item \textbf{Transactions remained stable:} Internal Transfer failures 3/1340 $\rightarrow$ 1/1399; View History failures 3/1595 $\rightarrow$ 8/1659 (still negligible).
+      \item \textbf{Key takeaway:} setting \texttt{minReplicas=2} for customer-auth removes cold-start/scale-up sensitivity under burst, improving end-to-end latency while keeping the near-zero error rate achieved in 5.2.1.
+    \end{itemize}
+\end{itemize}
+\newpage
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{trans3_auth2_target50_bcrypt.png}
+    \caption*{\textbf{Experiment 5.2.1:} Auth max=2, min=1; CPU target 50\%}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{authHPAmin2.png}
+    \caption*{\textbf{Experiment 5.2.2:} Auth max=2, \textbf{min=2}; CPU target 50\%}
+  \end{minipage}
+  \caption{Experiment 5.2.2: impact of fixing customer-auth minimum replicas.}
+  \label{fig:exp522_auth_min2_compare}
+\end{figure}
+
+\subsubsection{Experiment 6: Stress test the optimal configuration at higher load}
+
+\textbf{Optimal Configuration:}
+\begin{itemize}[leftmargin=*]
+  \item VM: e2-small (2 vCPU, 2GB RAM)
+  \item DB pool size: Default (100)
+  \item Hashing auth (bcrypt): 8 rounds (10 rounds before)
+  \item Auth HPA min/max: 2/2 (no HPA initially)
+  \item Transaction HPA min/max: 1/3 (no HPA initially)
+  \item Node autoscaling: Off
+  \item HPA CPU threshold: 50\%
+\end{itemize}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{500\_20}
+  \item \textbf{Results \& inferences (vs optimal \texttt{200\_10} run):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput scaled up:} aggregated \textbf{RPS} \textbf{37.31} (\texttt{200\_10}) $\rightarrow$ \textbf{86.47} (\texttt{500\_20}).
+      \item \textbf{Reliability remained strong:} failure rate stayed around \textbf{$\sim$0.1\%}
+        (9/11134 $\rightarrow$ 26/25835). Transaction failures were low (Internal Transfer 12/3229, View History 14/3797).
+      \item \textbf{Tail latency increased under stress:} aggregated avg \textbf{194ms $\rightarrow$ 573ms};
+        p95 \textbf{240ms $\rightarrow$ 2200ms} and p99 \textbf{800ms $\rightarrow$ 9800ms} (with max up to \textbf{25.4s}),
+        indicating queueing/backpressure effects at peak load even though error rate stayed low.
+      \item \textbf{Auth stayed stable but remained comparatively slower:} Login median $\sim$6.7s and Register median $\sim$8.6s at \texttt{500\_20} (0 failures), suggesting auth cost still contributes to end-to-end latency under high concurrency.
+      \item \textbf{Key takeaway:} the tuned configuration is \textbf{robust} at \texttt{500\_20} (low failures and high throughput), but \textbf{long-tail latency} becomes the main degradation dimension at higher load.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{authHPAmin2.png}
+    \caption*{\textbf{Optimal baseline:} \texttt{200\_10}}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{optimal_500_20.png}
+    \caption*{\textbf{Stress test:} \texttt{500\_20}}
+  \end{minipage}
+  \caption{Optimal configuration under baseline vs stress load.}
+  \label{fig:exp6_optimal_200_vs_500}
+\end{figure}
+
+\subsubsection{Experiment 6.1: Stress test with increased HPA ceiling}
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Test:} \texttt{500\_20}
+  \item \textbf{Changes vs 6:} HPA max replicas increased to 10
+  \item \textbf{Results \& inferences (vs Experiment 6):}
+    \begin{itemize}[leftmargin=*]
+      \item \textbf{Throughput decreased:} aggregated \textbf{RPS} 86.47 $\rightarrow$ 73.73.
+      \item \textbf{Failures remained low in both runs:} 26/25835 $\rightarrow$ 15/22011 (\textbf{$\approx$0.1\%} order).
+      \item \textbf{Latency worsened under max=10:} aggregated avg \textbf{573ms $\rightarrow$ 1.57s}; p95 \textbf{2.2s $\rightarrow$ 6.1s}; p99 \textbf{9.8s $\rightarrow$ 20s} (max \textbf{25.4s $\rightarrow$ 35.3s}).
+      \item \textbf{Node capacity became the limiter:} with \textbf{node autoscaling OFF}, raising HPA ceilings caused many pods to remain \textbf{Pending} (insufficient cluster resources). Extra replicas therefore could not translate into effective throughput and may increase contention/scheduling overhead.
+      \item \textbf{Key takeaway:} increasing HPA max replicas without adding node capacity (or enabling node autoscaling) can \textbf{degrade performance} at high load; scaling is limited by the cluster, not the HPA object.
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{optimal_500_20.png}
+    \caption*{\textbf{Experiment 6:} optimal config (\texttt{maxTrans=3, maxAuth=2})}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{max_pod_10.png}
+    \caption*{\textbf{Experiment 6.1:} increased ceilings (\texttt{maxAuth=10}, \texttt{maxTrans=10})}
+  \end{minipage}
+  \caption{Experiment 6 vs 6.1: Locust graph comparison under \texttt{500\_20}.}
+  \label{fig:exp61_50020_compare}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.43\linewidth]{node_exhaustion_max10.png}
+  \caption{Experiment 6.1: evidence of node exhaustion (many pods in \texttt{Pending} state) when HPA ceilings were increased while node autoscaling was disabled.}
+  \label{fig:exp61_node_exhaustion}
+\end{figure}
+
+\newpage
+% =========================================================
+\section{Cost Breakdown}
+
+\subsection{Monthly Cost Estimation}
+We have optimized resource selection to ensure the total monthly cost remains well below the \$300 free trial budget.
+
+\textbf{Projected Monthly Cost: \(\sim\$172.55\)}
+
+\begin{center}
+\begin{tabular}{@{}p{3cm}p{6cm}p{2.5cm}p{5.0cm}@{}}
+\toprule
+\textbf{Component} & \textbf{Resource Configuration} & \textbf{Estimated Monthly Cost} & \textbf{Justification} \\
+\midrule
+GKE Nodes & 3x e2-medium instances (2 vCPU, 4GB RAM) & \$139.20 & Sufficient resources to host the microservices and system pods \\
+GKE Management & Zonal Cluster & \$0.00 & Management fees waived for a single zonal cluster \\
+Database VM & 1x e2-small instance (2 vCPU, 2GB RAM) & \$11.10 & Adequate for MongoDB while minimizing compute costs \\
+Load Balancing & Network Load Balancer (Layer 4) & \$18.25 & External traffic routing and ingress management \\
+Storage (Disks) & 40GB disks per node (3x40GB) & \$4.00 & Boot disks and storage allocation \\
+Serverless & Cloud Functions (Gen 2) & \$0.00 & Expected to remain within free tier (first 2M invocations/month) \\
+Container Registry & Image storage (\(\sim\)1GB) & \(\sim\$1.00\) & Docker image storage \\
+Network Egress & Data transfer & \(\sim\$5\)--\$10 & Variable based on traffic volume \\
+\midrule
+\textbf{Total} &  & \textbf{\(\sim\$172.55\)} & \textbf{(58\% of total budget)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Cost Optimization Strategies}
+\textbf{Strategies Implemented:}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Right-sized GKE Nodes:} 3x e2-medium instances provide sufficient capacity
+  \item \textbf{Fixed Cluster Size:} No node auto-scaling (fixed 3 nodes) for predictable costs
+  \item \textbf{Optimized Database VM:} e2-small instance provides adequate MongoDB performance while minimizing compute costs
+  \item \textbf{Selective HPA:} Only transactions and customer-auth services have auto-scaling enabled
+  \item \textbf{Cloud Functions Free Tier:} Loan and ATM services use Cloud Functions (expected within free tier)
+  \item \textbf{Efficient Storage:} 40GB disks per node using pd-balanced for cost efficiency
+  \item \textbf{Zonal Cluster:} Single zonal cluster eliminates management fees
+  \item \textbf{Resource Management:} Requests/limits prevent resource waste
+\end{enumerate}
+
+% =========================================================
+\section{References}
+
+\subsection{Documentation}
+\begin{itemize}[leftmargin=*]
+  \item \href{https://cloud.google.com/docs}{GCP Documentation}
+  \item \href{https://cloud.google.com/kubernetes-engine/docs}{GKE Documentation}
+  \item \href{https://cloud.google.com/functions/docs}{Cloud Functions Documentation}
+  \item \href{https://kubernetes.io/docs/}{Kubernetes Documentation}
+  \item \href{https://docs.locust.io/}{Locust Documentation}
+\end{itemize}
+
+\subsection{Project Documentation}
+\begin{itemize}[leftmargin=*]
+  \item \texttt{docs/FINAL\_DOCS/COMPREHENSIVE\_PROJECT\_REPORT.md} - Detailed project report
+  \item \texttt{docs/FINAL\_DOCS/ARCHITECTURE\_DIAGRAM.md} - Architecture diagrams (Mermaid)
+  \item \texttt{docs/FINAL\_DOCS/INGRESS\_ROUTING\_DIAGRAM.md} - Ingress and routing diagram
+  \item \texttt{docs/FINAL\_DOCS/PRESENTATION\_SUMMARY.md} - Presentation summary
+  \item \texttt{docs/PROJECT\_STATUS\_GUIDE.md} - Current project status and development guide
+  \item \texttt{docs/GKE\_DEPLOYMENT\_GUIDE.md} - Step-by-step deployment guide
+  \item \texttt{docs/K8S\_DEPLOYMENT\_STEPS.md} - Kubernetes deployment steps
+  \item \texttt{docs/QUICK\_START.md} - Quick start guide
+  \item \texttt{README.md} - Project overview and setup
+\end{itemize}
+
+\end{document}
