@@ -66,27 +66,38 @@ Once you see an EXTERNAL-IP (not `<pending>`), access your app at:
 http://EXTERNAL_IP:8080
 ```
 
-## Step 5: Set Up HPA (Optional but Recommended)
+## Step 5: Set Up HPA (Manual Configuration - Required)
+
+**Important:** HPAs are configured manually using `kubectl` commands, not via Helm charts. Only transactions and customer-auth services have HPA enabled.
 
 ```bash
 # Install metrics server (if not already installed)
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 
-# Create HPA for Accounts
-kubectl autoscale deployment accounts -n martianbank \
-  --cpu-percent=70 \
-  --min=1 \
-  --max=5
+# Wait for metrics server to be ready
+kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=90s
 
-# Create HPA for Transactions
+# Create HPA for Transactions Service (min: 1, max: 3, CPU target: 50%)
 kubectl autoscale deployment transactions -n martianbank \
-  --cpu-percent=70 \
   --min=1 \
-  --max=5
+  --max=3 \
+  --cpu=50%
 
-# Verify HPA
+# Create HPA for Customer-Auth Service (fixed at 2 replicas, CPU target: 50%)
+kubectl autoscale deployment customer-auth -n martianbank \
+  --min=2 \
+  --max=2 \
+  --cpu=50%
+
+# Verify HPAs
 kubectl get hpa -n martianbank
+
+# View detailed HPA status
+kubectl describe hpa transactions -n martianbank
+kubectl describe hpa customer-auth -n martianbank
 ```
+
+**Note:** Other services (UI, Dashboard, Accounts, NGINX) run without HPA at fixed replica counts (1 replica each).
 
 ## Troubleshooting
 

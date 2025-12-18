@@ -52,24 +52,24 @@ Cloud Functions
 
 #### 1. **Kubernetes (GKE) - Containerized Workloads**
 - **Cluster:** `martianbank-cluster` (us-central1-a)
-- **Nodes:** 3-6 e2-medium nodes (auto-scaling enabled)
+- **Nodes:** 3 e2-medium nodes (fixed, no auto-scaling)
 - **Services Deployed:** 6 microservices
-- **Auto-scaling:** Horizontal Pod Autoscaler (HPA) configured for all services
+- **Auto-scaling:** Horizontal Pod Autoscaler (HPA) configured selectively for transactions and customer-auth
 - **Load Balancing:** GCP Network Load Balancer
 
 **Services:**
 | Service | Technology | Replicas | HPA Range | Status |
 |---------|-----------|----------|-----------|--------|
-| UI | React | 1 | 1-3 | ✅ |
-| Customer-Auth | Node.js | 3 | 1-10 | ✅ |
-| Dashboard | Flask | 1 | 1-3 | ✅ |
-| Accounts | Flask/gRPC | 1 | 1-5 | ✅ |
-| Transactions | Flask/gRPC | 2 | 2-5 | ✅ |
-| NGINX | Reverse Proxy | 1 | 1-3 | ✅ |
+| UI | React | 1 | No HPA | ✅ |
+| Customer-Auth | Node.js | 2 | 2-2 (Fixed) | ✅ |
+| Dashboard | Flask | 1 | No HPA | ✅ |
+| Accounts | Flask/gRPC | 1 | No HPA | ✅ |
+| Transactions | Flask/gRPC | 1 | 1-3 | ✅ |
+| NGINX | Reverse Proxy | 1 | No HPA | ✅ |
 
 #### 2. **Virtual Machine (Compute Engine) - MongoDB Database**
 - **Instance:** `mongodb-vm`
-- **Machine Type:** e2-custom-6-8192 (6 vCPU, 8GB RAM)
+- **Machine Type:** e2-small (2 vCPU, 2GB RAM)
 - **Zone:** us-central1-a
 - **Internal IP:** 10.128.0.2:27017
 - **Role:** Primary database for all microservices
@@ -119,11 +119,12 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 
 ### Infrastructure Setup
 1. **GKE Cluster Creation**
-   - 3-6 node cluster with auto-scaling
+   - 3 node cluster (fixed, no auto-scaling)
    - Auto-repair and auto-upgrade enabled
+   - Disk size: 40GB per node (pd-balanced)
 
 2. **MongoDB VM Setup**
-   - Custom machine type (6 vCPU, 8GB RAM)
+   - Machine type: e2-small (2 vCPU, 2GB RAM)
    - Network configuration for GKE access
    - Authentication and firewall rules
 
@@ -141,7 +142,7 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 2. **Kubernetes Deployment**
    - Helm charts for orchestration
    - ConfigMaps for configuration
-   - Horizontal Pod Autoscalers for scaling
+   - Horizontal Pod Autoscalers for selective scaling (transactions, customer-auth)
 
 3. **Load Balancer**
    - NGINX service with LoadBalancer type
@@ -194,8 +195,9 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 - ⚠️ **Transactions:** Performance improvements identified
 
 **Auto-scaling Behavior:**
-- HPA successfully scales services based on CPU utilization
-- Cluster auto-scaling handles node capacity
+- HPA successfully scales transactions service (1-3 replicas) based on CPU utilization (50% threshold)
+- Customer-auth service fixed at 2 replicas (HPA configured but min=max=2)
+- Other services run at fixed replica counts
 - Response times maintained under increasing load
 
 ---
@@ -206,23 +208,24 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 
 | Component | Resource | Monthly Cost |
 |-----------|----------|--------------|
-| **GKE Cluster** | 3-6x e2-medium nodes | ~$60-120 |
+| **GKE Cluster** | 3x e2-medium nodes | ~$60 |
 | **Load Balancer** | Network Load Balancer | ~$18 |
-| **Compute Engine** | e2-custom-6-8192 VM | ~$122 |
+| **Compute Engine** | e2-small VM | ~$11 |
 | **Cloud Functions** | Invocations + compute | ~$5-10 |
 | **Container Registry** | Image storage | ~$1 |
-| **Total** | | **~$206-262/month** |
+| **Total** | | **~$95/month** |
 
 ### Cost Optimization Strategies
-- ✅ Cluster auto-scaling (3-6 nodes) reduces idle costs
+- ✅ Fixed cluster size (3 nodes) for predictable costs
+- ✅ Right-sized MongoDB VM (e2-small) reduces database costs
 - ✅ Cloud Functions for infrequent workloads (pay-per-use)
-- ✅ Efficient resource allocation with HPA
+- ✅ Selective HPA for efficient resource allocation
 - ✅ Single Load Balancer (cost-effective routing)
 
 ### Budget Compliance
 - **GCP Trial Budget:** $300
-- **Estimated Monthly Cost:** ~$206-262
-- **Status:** ✅ Within budget constraints
+- **Estimated Monthly Cost:** ~$95/month
+- **Status:** ✅ Well within budget constraints
 
 ---
 
@@ -230,9 +233,9 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 
 ### Technical Requirements Met
 - ✅ **Containerized Workloads:** 6 microservices on Kubernetes
-- ✅ **Virtual Machines:** MongoDB on Compute Engine VM
+- ✅ **Virtual Machines:** MongoDB on Compute Engine VM (e2-small)
 - ✅ **Serverless Functions:** 3 Cloud Functions deployed
-- ✅ **Auto-scaling:** HPA configured for all services
+- ✅ **Auto-scaling:** Selective HPA configured for transactions and customer-auth
 - ✅ **Load Balancing:** GCP Load Balancer implemented
 
 ### Architecture Highlights
@@ -243,8 +246,8 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 - **Database:** Centralized MongoDB on dedicated VM
 
 ### Performance Highlights
-- **Scalability:** Auto-scaling from 1-10 replicas per service
-- **Reliability:** High availability with multiple replicas
+- **Scalability:** Transactions service scales 1-3 replicas, customer-auth fixed at 2 replicas
+- **Reliability:** High availability with multiple replicas for critical services
 - **Response Times:** Sub-second for most operations
 - **Throughput:** Handles 100+ concurrent users effectively
 
@@ -253,17 +256,17 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 ## 📋 Deployment Summary
 
 ### Infrastructure Components
-- **GKE Cluster:** 1 cluster, 3-6 nodes
-- **Compute Engine:** 1 VM (MongoDB)
+- **GKE Cluster:** 1 cluster, 3 fixed nodes
+- **Compute Engine:** 1 VM (MongoDB, e2-small)
 - **Cloud Functions:** 3 functions
 - **Load Balancer:** 1 Network Load Balancer
 - **Container Registry:** 6+ images
 
 ### Application Components
 - **Microservices:** 6 services
-- **Total Pods:** 9+ pods (with scaling)
+- **Total Pods:** 7 pods (base configuration)
 - **Services:** 6 Kubernetes services
-- **HPAs:** 6 Horizontal Pod Autoscalers
+- **HPAs:** 2 Horizontal Pod Autoscalers (transactions, customer-auth)
 
 ### Access Points
 - **Application URL:** http://136.119.54.74:8080
@@ -307,9 +310,9 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 - **Account Operations:** Stable under load
 
 ### Resource Utilization
-- **CPU:** Efficient usage with HPA scaling
+- **CPU:** Efficient usage with selective HPA scaling
 - **Memory:** Within allocated limits
-- **Scaling:** Automatic based on demand
+- **Scaling:** Automatic for transactions service (1-3 replicas), fixed for others
 
 ---
 
@@ -339,9 +342,9 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 
 ### Architecture Decisions
 1. **Hybrid Approach:** Kubernetes for core services, Cloud Functions for event-driven operations
-2. **Centralized Database:** MongoDB VM for data consistency
+2. **Centralized Database:** MongoDB VM (e2-small) for data consistency and cost efficiency
 3. **API Gateway Pattern:** NGINX for unified routing
-4. **Auto-scaling:** Both pod-level (HPA) and cluster-level scaling
+4. **Selective Auto-scaling:** Pod-level HPA for transactions service, fixed replicas for others
 
 ### Performance Insights
 1. **Cloud Functions:** Excellent for low-frequency, high-latency-tolerant operations
@@ -350,10 +353,11 @@ User → Load Balancer → NGINX → Cloud Function (loan-request) → MongoDB V
 4. **Load Balancing:** Single entry point simplifies architecture
 
 ### Cost Optimization
-1. **Auto-scaling:** Reduces idle resource costs
-2. **Serverless:** Pay-per-use model for infrequent operations
-3. **Resource Allocation:** Right-sized instances prevent over-provisioning
-4. **Monitoring:** Continuous cost tracking and optimization
+1. **Fixed Cluster Size:** Predictable costs with 3-node cluster
+2. **Right-sized VM:** e2-small MongoDB VM reduces database costs significantly
+3. **Serverless:** Pay-per-use model for infrequent operations
+4. **Selective Scaling:** HPA only where needed, reducing overhead
+5. **Monitoring:** Continuous cost tracking and optimization
 
 ---
 

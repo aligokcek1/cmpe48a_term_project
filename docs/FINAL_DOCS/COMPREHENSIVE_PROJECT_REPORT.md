@@ -11,17 +11,17 @@
 Martian Bank is a cloud-native microservices banking application successfully deployed on Google Cloud Platform. The system demonstrates a hybrid architecture combining Kubernetes-managed microservices with serverless Cloud Functions, all backed by a MongoDB database running on Compute Engine.
 
 ### Key Achievements
-- ✅ **6 Microservices** deployed on GKE with auto-scaling
+- ✅ **6 Microservices** deployed on GKE with selective auto-scaling
 - ✅ **3 Cloud Functions** for serverless operations
-- ✅ **MongoDB** on dedicated Compute Engine VM (6 vCPU, 8GB RAM)
-- ✅ **Horizontal Pod Autoscaler (HPA)** configured for all services
+- ✅ **MongoDB** on dedicated Compute Engine VM (2 vCPU, 2GB RAM)
+- ✅ **Horizontal Pod Autoscaler (HPA)** configured for transactions and customer-auth services
 - ✅ **GCP Load Balancer** providing external access
 - ✅ **NGINX** as internal API gateway routing to services and Cloud Functions
 - ✅ **Performance Testing** completed with identified optimization opportunities
 
 ### Current Infrastructure Status
-- **GKE Cluster:** 3-6 nodes (auto-scaling enabled), running stable
-- **Services:** 6/6 operational with auto-scaling
+- **GKE Cluster:** 3 nodes (no auto-scaling), running stable
+- **Services:** 6/6 operational with selective HPA (transactions: 1-3, customer-auth: 2-2)
 - **Cloud Functions:** 3/3 active and responding
 - **Database:** MongoDB operational with 13 ATM records
 - **Load Balancer:** Active at `136.119.54.74:8080`
@@ -49,9 +49,9 @@ Martian Bank is a cloud-native microservices banking application successfully de
 │              Google Kubernetes Engine (GKE)                          │
 │              Cluster: martianbank-cluster                            │
 │              Zone: us-central1-a                                     │
-│              Nodes: 3-6x e2-medium (2 vCPU, 4GB RAM each)         │
-│              Auto-scaling: 3-6 nodes (enabled)                     │
-│              Total Capacity: ~2.8-5.6 vCPUs allocatable            │
+│              Nodes: 3x e2-medium (2 vCPU, 4GB RAM each)            │
+│              Auto-scaling: Disabled (fixed 3 nodes)                │
+│              Total Capacity: ~2.8 vCPUs allocatable                │
 └────────────────────────────┬────────────────────────────────────────┘
                               │
                               ▼
@@ -60,7 +60,7 @@ Martian Bank is a cloud-native microservices banking application successfully de
 │              Pod: nginx-7cbc86f5bc-xrwnx                            │
 │              IP: 10.12.0.31                                         │
 │              Port: 8080                                              │
-│              HPA: 1-3 replicas (CPU: 70%)                           │
+│              Replicas: 1, No HPA                                      │
 │              Role: Internal API Gateway / Reverse Proxy             │
 └────────────────────────────┬────────────────────────────────────────┘
                               │
@@ -71,8 +71,8 @@ Martian Bank is a cloud-native microservices banking application successfully de
 │  UI Service  │    │Customer-Auth │    │  Dashboard   │
 │  (React)     │    │  (Node.js)   │    │  (Flask)     │
 │  Port: 3000  │    │  Port: 8000  │    │  Port: 5000  │
-│  Replicas: 1 │    │  Replicas: 3 │    │  Replicas: 1 │
-│  HPA: 1-3    │    │  HPA: 1-10   │    │  HPA: 1-3    │
+│  Replicas: 1 │    │  Replicas: 2 │    │  Replicas: 1 │
+│  No HPA      │    │  HPA: 2-2    │    │  No HPA      │
 │  Image:      │    │  Image: v2   │    │  Image:      │
 │  latest      │    │              │    │  latest      │
 └──────────────┘    └──────┬───────┘    └──────┬───────┘
@@ -84,8 +84,8 @@ Martian Bank is a cloud-native microservices banking application successfully de
                            │            │  Accounts    │ │ Transactions │
                            │            │  (Flask)     │ │  (Flask)     │
                            │            │  Port: 50051 │ │  Port: 50052 │
-                           │            │  Replicas: 1 │ │  Replicas: 2 │
-                           │            │  HPA: 1-5    │ │  HPA: 2-5    │
+                           │            │  Replicas: 1 │ │  Replicas: 1 │
+                           │            │  No HPA      │ │  HPA: 1-3    │
                            │            │  Image:      │ │  Image: v2   │
                            │            │  latest      │ │              │
                            │            └──────┬───────┘ └──────┬───────┘
@@ -97,7 +97,7 @@ Martian Bank is a cloud-native microservices banking application successfully de
                                                         ▼              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │         Compute Engine VM (mongodb-vm)                               │
-│         Machine Type: e2-custom-6-8192 (6 vCPU, 8GB RAM)            │
+│         Machine Type: e2-small (2 vCPU, 2GB RAM)                   │
 │         Internal IP: 10.128.0.2:27017                               │
 │         Status: RUNNING                                               │
 │         Database: bank                                               │
@@ -132,7 +132,7 @@ GCP Load Balancer (136.119.54.74:8080)
     ↓
 NGINX Pod (10.12.0.31:8080)
     ↓ Route: /api/users → customer-auth:8000
-Customer-Auth Service (3 replicas)
+Customer-Auth Service (2 replicas, fixed)
     ↓ MongoDB Query
 MongoDB VM (10.128.0.2:27017)
     ↓ JWT Token Response
@@ -166,7 +166,7 @@ NGINX Pod
     ↓ Route: /api/transaction → dashboard:5000
 Dashboard Service
     ↓ gRPC/HTTP Call
-Transactions Service (2 replicas, HPA: 2-5)
+Transactions Service (1 replica, HPA: 1-3, can scale to 3)
     ↓ MongoDB Transaction
 MongoDB VM
     ↓ Response
@@ -216,19 +216,21 @@ Location: us-central1-a
 Status: RUNNING
 Master IP: 34.9.197.138
 Node Pool: default-pool
-  - Node Count: 3-6 (auto-scaling enabled)
+  - Node Count: 3 (fixed, no auto-scaling)
   - Machine Type: e2-medium (2 vCPU, 4GB RAM per node)
-  - Total vCPUs: 6-12 (allocatable: ~2.8-5.6 vCPUs)
-  - Total Memory: 12-24GB (allocatable: ~9-18GB)
-  - Auto-scaling: Enabled (3-6 nodes)
+  - Total vCPUs: 6 (allocatable: ~2.8 vCPUs)
+  - Total Memory: 12GB (allocatable: ~9GB)
+  - Auto-scaling: Disabled
   - Auto-repair: Enabled
   - Auto-upgrade: Enabled
+  - Disk Size: 40GB per node (pd-balanced)
 ```
 
 **Node Details:**
-- `gke-martianbank-cluster-default-pool-70a839a4-3df9`: 14 pods
-- `gke-martianbank-cluster-default-pool-70a839a4-c6wh`: 15 pods
-- `gke-martianbank-cluster-default-pool-70a839a4-z264`: 11 pods
+- 3 nodes in default-pool
+- Each node: e2-medium (2 vCPU, 4GB RAM)
+- Disk: 40GB pd-balanced per node
+- Total pods distributed across 3 nodes
 
 **Namespace:** `martianbank`
 
@@ -239,9 +241,9 @@ Node Pool: default-pool
 Instance Name: mongodb-vm
 Zone: us-central1-a
 Status: RUNNING
-Machine Type: e2-custom-6-8192
-  - vCPUs: 6
-  - Memory: 8GB RAM
+Machine Type: e2-small
+  - vCPUs: 2
+  - Memory: 2GB RAM
 Internal IP: 10.128.0.2
 External IP: None (internal only)
 OS: Ubuntu 22.04 LTS
@@ -308,7 +310,7 @@ gcr.io/cmpe48a-term-project/martianbank-nginx:latest
 **Configuration:**
 ```
 Deployment: ui
-Replicas: 1 (HPA: 1-3)
+Replicas: 1 (No HPA)
 Image: gcr.io/cmpe48a-term-project/martianbank-ui:latest
 Port: 3000
 Service Type: ClusterIP
@@ -333,7 +335,7 @@ Resources:
 **Configuration:**
 ```
 Deployment: customer-auth
-Replicas: 3 (HPA: 1-10, currently scaled to 3)
+Replicas: 2 (HPA: 2-2, fixed at 2 replicas)
 Image: gcr.io/cmpe48a-term-project/customer-auth:v2
 Port: 8000
 Service Type: ClusterIP
@@ -350,22 +352,19 @@ Resources:
 - `POST /api/users/logout` - User logout
 - `PUT /api/users/profile` - Profile updates
 
-**Current Status:** ✅ Running (3 pods)
-- Pod: customer-auth-68cd7d8fdc-bqd2j (10.12.1.61)
-- Pod: customer-auth-68cd7d8fdc-gzcsj (10.12.1.40)
-- Pod: customer-auth-68cd7d8fdc-lrkkc (10.12.2.182)
+**Current Status:** ✅ Running (2 pods)
 
 **Performance:** 
 - CPU Usage: 0% (idle)
-- HPA Target: 70% CPU
-- Max Replicas: 10
+- HPA Target: 50% CPU
+- Fixed Replicas: 2 (no scaling)
 
 ### 3. Dashboard Service
 
 **Configuration:**
 ```
 Deployment: dashboard
-Replicas: 1 (HPA: 1-3)
+Replicas: 1 (No HPA)
 Image: gcr.io/cmpe48a-term-project/martianbank-dashboard:latest
 Port: 5000
 Service Type: ClusterIP
@@ -386,18 +385,17 @@ Resources:
 - `DB_URL`: mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin
 
 **Current Status:** ✅ Running (1 pod)
-- Pod: dashboard-6bc94449c-59f4r (10.12.0.35)
 
 **Performance:**
 - CPU Usage: 1%
-- HPA Target: 70% CPU
+- No HPA (fixed at 1 replica)
 
 ### 4. Accounts Service
 
 **Configuration:**
 ```
 Deployment: accounts
-Replicas: 1 (HPA: 1-5)
+Replicas: 1 (No HPA)
 Image: gcr.io/cmpe48a-term-project/martianbank-accounts:latest
 Port: 50051 (gRPC)
 Service Type: ClusterIP
@@ -411,18 +409,17 @@ Resources:
 **Protocol:** Configurable HTTP or gRPC (via `SERVICE_PROTOCOL` env var)
 
 **Current Status:** ✅ Running (1 pod)
-- Pod: accounts-77b6bb7c77-kkr8s (10.12.2.115)
 
 **Performance:**
 - CPU Usage: 4%
-- HPA Target: 70% CPU
+- No HPA (fixed at 1 replica)
 
 ### 5. Transactions Service
 
 **Configuration:**
 ```
 Deployment: transactions
-Replicas: 2 (HPA: 2-5, currently scaled to 2)
+Replicas: 1 (HPA: 1-3, can scale up to 3)
 Image: gcr.io/cmpe48a-term-project/transactions:v2
 Port: 50052 (gRPC)
 Service Type: ClusterIP
@@ -435,21 +432,19 @@ Resources:
 
 **Protocol:** Configurable HTTP or gRPC (via `SERVICE_PROTOCOL` env var)
 
-**Current Status:** ✅ Running (2 pods)
-- Pod: transactions-7888f84665-dbnzm (10.12.1.65) - 5 restarts
-- Pod: transactions-7888f84665-q6ztc (10.12.2.210)
+**Current Status:** ✅ Running (1 pod, can scale to 3)
 
 **Performance:**
 - CPU Usage: 4%
-- HPA Target: 70% CPU
-- **Note:** One pod has restarted 5 times (investigation needed)
+- HPA Target: 50% CPU
+- Min Replicas: 1, Max Replicas: 3
 
 ### 6. NGINX Service
 
 **Configuration:**
 ```
 Deployment: nginx
-Replicas: 1 (HPA: 1-3)
+Replicas: 1 (No HPA)
 Image: gcr.io/cmpe48a-term-project/martianbank-nginx:latest
 Port: 8080
 Service Type: LoadBalancer (creates GCP Load Balancer)
@@ -473,11 +468,10 @@ Resources:
 ```
 
 **Current Status:** ✅ Running (1 pod)
-- Pod: nginx-7cbc86f5bc-xrwnx (10.12.0.31)
 
 **Performance:**
 - CPU Usage: 0%
-- HPA Target: 70% CPU
+- No HPA (fixed at 1 replica)
 
 ---
 
@@ -556,27 +550,28 @@ Environment Variables:
 
 ## 📈 Horizontal Pod Autoscaler (HPA) Configuration
 
-All services have HPA configured with the following settings:
+Selective HPA configuration - only transactions and customer-auth services have HPA enabled:
 
 | Service | Min Replicas | Max Replicas | Target CPU | Current Replicas | Current CPU | Status |
 |---------|-------------|--------------|------------|------------------|-------------|--------|
-| **accounts** | 1 | 5 | 70% | 1 | 4% | ✅ Active |
-| **transactions** | 2 | 5 | 70% | 2 | 4% | ✅ Active |
-| **customer-auth** | 1 | 10 | 70% | 3 | 0% | ✅ Active |
-| **dashboard** | 1 | 3 | 70% | 1 | 1% | ✅ Active |
-| **ui** | 1 | 3 | 70% | 1 | 11% | ✅ Active |
-| **nginx** | 1 | 3 | 70% | 1 | 0% | ✅ Active |
+| **accounts** | N/A | N/A | N/A | 1 | 4% | ❌ No HPA |
+| **transactions** | 1 | 3 | 50% | 1 | 4% | ✅ Active |
+| **customer-auth** | 2 | 2 | 50% | 2 | 0% | ✅ Active (Fixed) |
+| **dashboard** | N/A | N/A | N/A | 1 | 1% | ❌ No HPA |
+| **ui** | N/A | N/A | N/A | 1 | 11% | ❌ No HPA |
+| **nginx** | N/A | N/A | N/A | 1 | 0% | ❌ No HPA |
 
 **HPA Behavior:**
-- Scales up when CPU usage exceeds 70% for sustained period
-- Scales down when CPU usage drops below 70%
+- **transactions**: Scales up when CPU usage exceeds 50% (min: 1, max: 3)
+- **customer-auth**: Fixed at 2 replicas (HPA configured but min=max=2)
+- Scales down when CPU usage drops below threshold
 - Cooldown period: 15 seconds (default)
 - Metrics source: Kubernetes Metrics Server
 
 **Current Scaling Status:**
-- `customer-auth`: Scaled to 3 replicas (likely from previous load)
-- `transactions`: Running at minimum (2 replicas, min: 2)
-- Other services: Running at minimum (1 replica)
+- `customer-auth`: Fixed at 2 replicas (no scaling)
+- `transactions`: Running at minimum (1 replica, can scale to 3)
+- Other services: Fixed at 1 replica (no HPA)
 
 ---
 
@@ -649,8 +644,8 @@ Cloud Functions: HTTPS URLs (see Cloud Functions section)
 - **Subtotal:** ~$78/month
 
 **Compute Engine:**
-- 1x e2-custom-6-8192 VM: ~$122/month
-- **Subtotal:** ~$122/month
+- 1x e2-small VM: ~$11/month
+- **Subtotal:** ~$11/month
 
 **Cloud Functions:**
 - Invocations: ~$0.40 per million
@@ -661,7 +656,7 @@ Cloud Functions: HTTPS URLs (see Cloud Functions section)
 - Storage: ~$0.026 per GB/month
 - **Subtotal:** ~$1/month
 
-**Total Estimated Monthly Cost:** ~$206/month
+**Total Estimated Monthly Cost:** ~$95/month
 
 **Cost Optimization Opportunities:**
 1. Use preemptible nodes for non-critical workloads
@@ -876,39 +871,8 @@ kubectl scale deployment <deployment-name> --replicas=3 -n martianbank
 
 ---
 
-## ✅ Success Criteria Status
 
-### Completed ✅
-- [x] All 6 microservices deployed on GKE
-- [x] MongoDB running on Compute Engine VM
-- [x] 3 Cloud Functions deployed and active
-- [x] HPA configured for all services
-- [x] Load Balancer configured and accessible
-- [x] Application accessible externally
-- [x] Database populated with test data
-- [x] Performance testing completed
-- [x] Architecture documented
 
-### In Progress ⏳
-- [ ] Performance optimizations implemented
-- [ ] Cluster capacity increased
-- [ ] HTTPS/TLS enabled
-- [ ] Enhanced monitoring configured
-
-### Pending ❌
-- [ ] Production-ready security hardening
-- [ ] CI/CD pipeline implementation
-- [ ] Disaster recovery procedures
-- [ ] Final documentation review
-
----
-
-**Document Version:** 2.0  
-**Last Updated:** December 8, 2025  
-**Maintained By:** Development Team  
-**Next Review:** After performance optimizations
-
----
 
 ## 🆘 Support & Troubleshooting
 

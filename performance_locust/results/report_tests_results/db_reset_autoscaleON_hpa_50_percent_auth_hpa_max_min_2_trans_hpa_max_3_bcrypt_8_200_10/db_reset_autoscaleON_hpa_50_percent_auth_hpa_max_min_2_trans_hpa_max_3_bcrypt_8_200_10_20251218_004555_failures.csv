@@ -1,0 +1,3 @@
+Method,Name,Error,Occurrences
+POST,[Transaction] Internal Transfer,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] Internal Transfer'),5
+POST,[Transaction] View History,HTTPError('500 Server Error: INTERNAL SERVER ERROR for url: [Transaction] View History'),3

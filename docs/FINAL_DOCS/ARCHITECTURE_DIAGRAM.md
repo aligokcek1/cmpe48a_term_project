@@ -1,6 +1,6 @@
 # Martian Bank - Detailed Architecture Diagram
 
-## System Architecture (Mermaid)
+## Final System Architecture
 
 ```mermaid
 graph TB
@@ -14,26 +14,26 @@ graph TB
         end
 
         subgraph GKE["Google Kubernetes Engine (GKE)"]
-            subgraph Cluster["martianbank-cluster<br/>3-6 nodes (auto-scaling)"]
+            subgraph Cluster["martianbank-cluster<br/>3 nodes (no-auto-scaling)"]
                 subgraph NginxPod["NGINX Service"]
-                    Nginx["NGINX Pod<br/>Port: 8080<br/>HPA: 1-3"]
+                    Nginx["NGINX Pod<br/>Port: 8080<br/>Replicas: 1, No HPA"]
                 end
 
                 subgraph Frontend["Frontend Services"]
-                    UI["UI Service<br/>React<br/>Port: 3000<br/>HPA: 1-3"]
+                    UI["UI Service<br/>React<br/>Port: 3000<br/>Replicas: 1, No HPA"]
                 end
 
                 subgraph Backend["Backend Services"]
-                    Auth["Customer-Auth<br/>Node.js<br/>Port: 8000<br/>HPA: 1-10<br/>Replicas: 3"]
-                    Dashboard["Dashboard<br/>Flask<br/>Port: 5000<br/>HPA: 1-3"]
-                    Accounts["Accounts<br/>Flask/gRPC<br/>Port: 50051<br/>HPA: 1-5"]
-                    Transactions["Transactions<br/>Flask/gRPC<br/>Port: 50052<br/>HPA: 2-5<br/>Replicas: 2"]
+                    Auth["Customer-Auth<br/>Node.js<br/>Port: 8000<br/>HPA: 2-2<br/>Replicas: 2"]
+                    Dashboard["Dashboard<br/>Flask<br/>Port: 5000<br/>Replicas: 1, No HPA"]
+                    Accounts["Accounts<br/>Flask/gRPC<br/>Port: 50051<br/> Replicas: 1, No HPA"]
+                    Transactions["Transactions<br/>Flask/gRPC<br/>Port: 50052<br/>HPA: 1-3<br/>"]
                 end
             end
         end
 
         subgraph VM["Compute Engine VM"]
-            MongoDB["MongoDB Database<br/>e2-custom-6-8192<br/>6 vCPU, 8GB RAM<br/>10.128.0.2:27017"]
+            MongoDB["MongoDB Database<br/>e2-small<br/>2 vCPU, 2GB RAM<br/>10.128.0.2:27017"]
         end
 
         subgraph CF["Cloud Functions"]
@@ -100,13 +100,10 @@ graph TB
             Node1[Node 1<br/>e2-medium<br/>2 vCPU, 4GB]
             Node2[Node 2<br/>e2-medium<br/>2 vCPU, 4GB]
             Node3[Node 3<br/>e2-medium<br/>2 vCPU, 4GB]
-            Node4[Node 4<br/>e2-medium<br/>2 vCPU, 4GB]
-            Node5[Node 5<br/>e2-medium<br/>2 vCPU, 4GB]
-            Node6[Node 6<br/>e2-medium<br/>2 vCPU, 4GB]
         end
 
         subgraph "Compute Engine"
-            MongoDBVM[MongoDB VM<br/>e2-custom-6-8192<br/>6 vCPU, 8GB RAM]
+            MongoDBVM[MongoDB VM<br/>e2-small<br/>2 vCPU, 2GB RAM]
         end
 
         subgraph "Cloud Functions"
@@ -124,9 +121,6 @@ graph TB
     LB --> Node1
     LB --> Node2
     LB --> Node3
-    Node1 -.->|Auto-scaling| Node4
-    Node2 -.->|Auto-scaling| Node5
-    Node3 -.->|Auto-scaling| Node6
 
     Node1 --> MongoDBVM
     Node2 --> MongoDBVM

@@ -208,10 +208,10 @@ def print_test_summary(params):
     if params['users'] <= 20:
         load_category = "Light Load"
         expectation = "Minimal resource usage, no scaling expected"
-    elif params['users'] <= 60:
+    elif params['users'] <= 50:
         load_category = "Normal Load"
         expectation = "Stable performance, possible minimal HPA scaling"
-    elif params['users'] <= 120:
+    elif params['users'] <= 200:
         load_category = "High Load"
         expectation = "HPA scaling expected, increased latency acceptable"
     else:
@@ -226,8 +226,10 @@ def run_test(params):
     """Execute the performance test with given parameters"""
     
     # Create results directory
-    results_dir = "results"
+    results_dir = "results/"
     os.makedirs(results_dir, exist_ok=True)
+    test_dir = os.path.join(results_dir, params['test_name'])
+    os.makedirs(test_dir, exist_ok=True)
     
     # Generate timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -236,8 +238,8 @@ def run_test(params):
     test_file = "comprehensive_system_test.py"
     host = "http://136.119.54.74:8080"
     
-    html_output = f"{results_dir}/{params['test_name']}_{timestamp}.html" if params['generate_html'] else None
-    csv_output = f"{results_dir}/{params['test_name']}_{timestamp}" if params['generate_csv'] else None
+    html_output = f"{test_dir}/{params['test_name']}_{timestamp}.html" if params['generate_html'] else None
+    csv_output = f"{test_dir}/{params['test_name']}_{timestamp}" if params['generate_csv'] else None
     
     # Build locust command
     cmd = [
