@@ -17,180 +17,331 @@ MartianBank is a microservices demo application that simulates an app to allow c
 
 <br />
 
-# Table of Contents
-- [Application Design](#application-design)
-- [Getting Started](#installation)
-  - [Installation on Docker Desktop Kubernetes](#1-installation-on-docker-desktop-kubernetes)
-  - [Installation on Minikube Cluster](#2-installation-on-minikube-cluster)
-  - [Installation on KIND Cluster](#3-installatioin-on-kind-cluster)
-  - [Installation on AWS EKS Cluster](#4-installation-on-aws-eks-cluster)
-  - [Running Locally](#5-local-installation)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+
+# MARTIAN BANK
+
+MartianBank is a microservices demo application that simulates a banking platform where customers can manage accounts, perform transactions, locate ATMs, and apply for loans. It is built using [React](https://react.dev/), [Node.js](https://nodejs.org/en/about), [Python](https://flask.palletsprojects.com/en/2.3.x/), and is packaged in [Docker](https://www.docker.com/) containers.
+
+## Highlights
+
+- Microservices Architecture
+- Helm-based configurable deployment (HTTP/gRPC)
+- GCP/GKE deployment with MongoDB on VM
+- Performance/load testing with Locust
+
+---
+
+## Application Design
+
+The Martian Bank UI is built with [React](https://react.dev/) and [Redux Toolkit](https://redux-toolkit.js.org/). NGINX acts as a reverse proxy for UI and backend services. There are 6 microservices: 2 (customer-auth, atm-locator) in Node.js, the rest in Python (Flask). The dashboard service communicates with accounts, transactions, and loan microservices via [gRPC](https://grpc.io/) or HTTP (configurable at deployment).
 
 
-<br />
+---
 
-#  Application Design
+## Deployment Guide: GCP/GKE Setup
 
-The Martian Bank UI is created using [React](https://react.dev/) and [react-redux toolkit](https://redux-toolkit.js.org/). There is an [NGINX](https://www.nginx.com/) container that acts as a reverse proxy for UI and backend services. There are 6 microservices, out of which 2 (customer-auth and atm-locator) are developed in Node.js whereas the others are done using Flask (Python). The dashboard microservice talks to accounts, transactions and loan microservices using [gRPC](https://grpc.io/) and [http](https://en.wikipedia.org/wiki/HTTP) (can be flipped and is available as a deployment parameter).
+This guide explains how to deploy MartianBank on Google Cloud Platform using Google Kubernetes Engine (GKE) and a MongoDB VM. For troubleshooting and advanced details, see the docs/ folder.
 
-![Architecture Diagram](./images/Arch.png)
+## Prerequisites
 
-<br />
+Before installing MartianBank, make sure **all prerequisites below are fully satisfied**. Skipping any of these steps may result in failed deployments, pods stuck in `CrashLoopBackOff`, or LoadBalancer services remaining in `Pending` state.
 
-#  Installation
-There are mulitple ways to install MartianBank.
+---
 
-<br />
+### 1. GCP Account with Billing Enabled
 
-##  1. Installation on Docker Desktop Kubernetes
-This tutorial will guide you through the process of setting up and installing the MartianBank app using Helm on a Kubernetes cluster. Helm is a package manager for Kubernetes that simplifies the deployment of applications and services.
+MartianBank requires Google Cloud resources such as **GKE clusters**, **Compute Engine VMs**, and **LoadBalancer services**, all of which require an active billing account.
 
-Before we begin, please ensure you have the following prerequisites installed:
+**Steps:**
 
-1.  **Docker**: To run Kubernetes and containerized applications. You can download and install Docker from [here](https://www.docker.com/).
-2.  **Kubernetes**: Enable Kubernetes within Docker Desktop. Follow the instructions provided in the official Docker documentation [here](https://docs.docker.com/desktop/kubernetes/).
-3.  **kubectl**: The Kubernetes command-line tool to interact with the cluster. Install it using the guidelines found [here](https://kubernetes.io/docs/tasks/tools/).
-4.  **Helm**: The package manager for Kubernetes. Helm allows you to define, install, and upgrade complex Kubernetes applications. Follow the installation instructions [here](https://helm.sh/docs/intro/install/).
+1. Create or select a project in Google Cloud Console.
+2. Link a billing account to the project.
+3. Enable the following APIs:
+   - Kubernetes Engine API
+   - Compute Engine API
+   - Cloud Resource Manager API
 
-Once you have the prerequisites installed, proceed with the following steps to set up MartianBank:
+**Verify:**
 
-####  Step 1: Clone the MartianBank GitHub Repository
-First, download the MartianBank GitHub repository using the following steps:
-
-1.  Open your terminal or command prompt.
-
-2.  Clone the repository by running the command:
 ```bash
-git clone https://github.com/cisco-open/martian-bank-demo.git
+gcloud projects list
+gcloud config get-value project
 ```
 
-3.  Change to the downloaded repository directory using the command:
+---
+
+### 2. Install and Authenticate `gcloud` CLI
+
+The `gcloud` CLI is required to create GKE clusters, VM instances, and authenticate Docker to push images to GCR.
+
+**Install:**
+
 ```bash
-cd martian-bank-demo
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
 ```
 
-4.  Add the `configmap.yaml` config file to `martianbank/templates/` folder with the following content
-```  yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: configmap-martianbank
-data:
-  DB_URL: # enter the DB url
-  JWT_SECRET: # enter any string that you wish to use as a secret
-```
+**Authenticate and set project:**
 
-When running Docker or pods, use `"mongodb://root:example@mongodb:27017"` for the local database.
-
-**`NOTE:`** We recommend to change the mongoDB password to some value other than `example` in the above URL. To do this, you can edit `/martianbank/templates/configmap.yaml`.
- 
-####  Step 2: Install MartianBank using Helm
-Now that you have the MartianBank repository downloaded, you can use Helm to install the app on your Kubernetes cluster.
-
-1. To install MartianBank, use the Helm command:
 ```bash
-helm install martianbank martianbank
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
 ```
 
-By default loan, transaction and accounts microservices will run with http protocol. To switch to gRPC type the following command:
+**Verify:**
+
 ```bash
-helm install martianbank martianbank --set SERVICE_PROTOCOL=grpc
+gcloud version
 ```
 
-Additionally, you can flip between mongoDB local and mongoDB Atlas (cloud database instance). To switch to local mongo, use the following flag:
+---
+
+### 3. Install Docker
+
+Docker is required to build and push container images for all microservices.
+
+Install Docker Desktop:
+[https://www.docker.com/get-started/](https://www.docker.com/get-started/)
+
+Authenticate Docker with GCR:
+
 ```bash
-helm install martianbank martianbank --set "mongodb.enabled=false"
+gcloud auth configure-docker
 ```
 
-By default, we use NGINX for reverse-proxy. If you want to deploy without NGINX, use this flag:
+Verify:
+
 ```bash
-helm install martianbank martianbank --set "nginx.enabled=false"
+docker version
 ```
 
-2.  Wait for the installation to complete. Helm will deploy the necessary components to your Kubernetes cluster.
+---
 
-####  Step 3: Check Pod Status
-After the installation is complete, you can verify the status of the pods running within your Kubernetes cluster.
+### 4. Install `kubectl`
 
-To get a list of pods, run the following command:
+`kubectl` is the Kubernetes command-line tool used to manage clusters, pods, and services.
+
+**Install:**
+
 ```bash
-kubectl get pods
+gcloud components install kubectl
 ```
 
-####  Step 4: Get MartianBank App URL
+After creating your GKE cluster:
 
-To access the MartianBank app, you need to find the URL (IP address) of the running MartianBank service.
-Run the following command to get the list of services:
 ```bash
-kubectl get service
+gcloud container clusters get-credentials martianbank-cluster \
+  --zone=us-central1-a
 ```
 
-Look for the **EXTERNAL-IP** under the **_nginx_** microservice. This IP address is where the MartianBank app is accessible.
+Verify:
 
-####  Step 5: Access MartianBank App
-Now that you have the URL (IP address) of the MartianBank app, you can access it using a web browser.
-1.  Copy the URL (IP address) from the **EXTERNAL-IP** field.
-2.  Paste the URL in your browser's address bar, add the port (i.e. 8080) and press Enter to access the MartianBank app. For example, if the IP is `localhost`, simply put `localhost:8080` in the browser to access the MartianBank app. 
-
-Congratulations! You have successfully installed and accessed the MartianBank app on your Kubernetes cluster using Helm. Now you can explore and use the app as needed. If you encounter any issues during installation, double-check the prerequisites and ensure that all steps were followed correctly. Happy banking with MartianBank!
-
-####  Tutorial: Uninstalling the MartianBank App
-In this section, you'll learn how to uninstall the MartianBank app from your Kubernetes cluster. We'll follow two simple steps to ensure a clean removal of the app.
-
-**Step 1: Uninstall using Helm**
-To remove the MartianBank app from the cluster, we'll use Helm to uninstall it.
-
-1.  Open your terminal or command prompt.
-
-2.  Run the following Helm command to uninstall the MartianBank release:
 ```bash
-helm uninstall martianbank
+kubectl get nodes
 ```
-This command will remove all the Kubernetes resources associated with the MartianBank release.
 
+---
 
-**Step 2: Delete Remaining Resources**
-Although Helm has uninstalled the main components, there might still be some resources remaining in the cluster. To ensure a complete removal, we'll use kubectl to delete all resources in the default namespace.
+### 5. Install Helm
 
-1.  Run the following kubectl command:
+MartianBank is deployed entirely using Helm charts. Helm v3 or later is required.
+
+**Install:**
+
 ```bash
-kubectl delete all --all --namespace default
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 ```
 
-This command will delete all resources (pods, services, deployments, etc.) in the default namespace.
+**Verify:**
 
-After performing the above two steps, the MartianBank app should be completely uninstalled from your Kubernetes cluster.
-
-
-**Note:** If you have installed the MartianBank app in a namespace other than "default," make sure to change the `--namespace` flag in both the Helm and kubectl commands accordingly.
-
-Now you have successfully uninstalled the MartianBank app from your Kubernetes cluster, and all associated resources have been removed. If you have any other Helm releases or resources running on the cluster, you can manage them similarly using Helm commands and kubectl operations.
-
-<br />
-
-##  2. Installation on Minikube Cluster
-
-Let's go through the steps to install MartianBank using Minikube. Minikube allows you to run a single-node Kubernetes cluster on your local machine, making it ideal for testing and development purposes.
-
-**Step 1: Install Minikube and Prerequisites**
-
-If you haven't already installed Minikube and its prerequisites, follow the official Minikube installation guide based on your operating system: [Minikube Installation Guide](https://minikube.sigs.k8s.io/docs/start/)
-  
-**Step 2: Start Minikube Cluster**
-
-1.  Open your terminal or command prompt.
-
-2.  Start the Minikube cluster by running the following command:
 ```bash
-minikube start
+helm version
 ```
 
-This command will create and start a local Kubernetes cluster using Minikube.
+---
 
-**Step 3: Install Helm**
+# Deployment Steps
+
+---
+
+### 1. MongoDB VM Setup
+
+1. **Create a VM** (Ubuntu 22.04 LTS, e2-small, no external IP, allow TCP:27017 from GKE):
+  ```bash
+  gcloud compute instances create mongodb-vm \
+    --zone=us-central1-a \
+    --machine-type=e2-small \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --boot-disk-size=40GB
+  ```
+2. **SSH into the VM and install MongoDB:**
+  ```bash
+  gcloud compute ssh mongodb-vm --zone=us-central1-a
+  # Follow the steps in docs/MONGODB_VM_SETUP.md to install and secure MongoDB
+  ```
+3. **Configure MongoDB:**
+  - Bind to `0.0.0.0` in `/etc/mongod.conf`
+  - Create admin user and enable authentication
+  - Note the internal IP (e.g., 10.128.0.2) and password
+  - Open firewall for GKE nodes (see setup guide)
+
+---
+
+### 2. Build and Push Docker Images
+
+1. **Set your GCP project:**
+  ```bash
+  export PROJECT_ID=$(gcloud config get-value project)
+  ```
+2. **Configure Docker for GCR:**
+  ```bash
+  gcloud auth configure-docker
+  ```
+3. **Build and push images:**
+  ```bash
+  docker build -t gcr.io/$PROJECT_ID/martianbank-ui:latest ./ui
+  docker push gcr.io/$PROJECT_ID/martianbank-ui:latest
+  # Repeat for customer-auth, accounts, transactions, dashboard, nginx
+  ```
+
+---
+
+### 3. GKE Cluster Setup
+
+1. **Create GKE cluster:**
+  ```bash
+  gcloud container clusters create martianbank-cluster \
+    --zone=us-central1-a \
+    --num-nodes=3 \
+    --machine-type=e2-medium
+  gcloud container clusters get-credentials martianbank-cluster --zone=us-central1-a
+  ```
+2. **Create namespace:**
+  ```bash
+  kubectl create namespace martianbank
+  ```
+
+---
+
+### 4. Configure Secrets and ConfigMap
+
+1. **Set variables:**
+  ```bash
+  export MONGODB_IP="10.128.0.2"  # Your VM's internal IP
+  export MONGODB_PASSWORD="YOUR_MONGODB_PASSWORD"
+  export JWT_SECRET=$(openssl rand -hex 32)
+  ```
+2. **Create ConfigMap:**
+  ```bash
+  kubectl create configmap configmap-martianbank \
+    --from-literal=DB_URL="mongodb://root:${MONGODB_PASSWORD}@${MONGODB_IP}:27017/bank?authSource=admin" \
+    --from-literal=JWT_SECRET="$JWT_SECRET" \
+    --namespace=martianbank
+  ```
+
+---
+
+### 5. Deploy with Helm
+
+1. **Update `martianbank/values.yaml`** with:
+  - Image repositories (point to GCR)
+  - MongoDB connection string
+  - Cloud Function URLs (if used)
+2. **Install with Helm:**
+  ```bash
+  helm install martianbank ./martianbank \
+    --namespace martianbank \
+    --set SERVICE_PROTOCOL=http \
+    --set DB_URL="mongodb://root:${MONGODB_PASSWORD}@${MONGODB_IP}:27017/bank?authSource=admin" \
+    --set imageRegistry="gcr.io/$PROJECT_ID" \
+    --set mongodb.enabled=false \
+    --set nginx.enabled=true
+  ```
+
+---
+
+### 6. Expose Application via Load Balancer
+
+1. **Wait for NGINX service external IP:**
+  ```bash
+  kubectl get service nginx -n martianbank -w
+  # When EXTERNAL-IP is assigned, access http://EXTERNAL_IP:8080
+  ```
+
+---
+
+### 7. Configure Horizontal Pod Autoscaler (HPA)
+
+> HPAs are configured manually after deployment. Only `transactions` and `customer-auth` services have HPA enabled.
+
+1. **Install metrics server (if not already):**
+  ```bash
+  kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+  kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=90s
+  ```
+2. **Create HPA for transactions:**
+  ```bash
+  kubectl autoscale deployment transactions -n martianbank --min=1 --max=3 --cpu=50%
+  ```
+3. **Create HPA for customer-auth:**
+  ```bash
+  kubectl autoscale deployment customer-auth -n martianbank --min=2 --max=2 --cpu=50%
+  ```
+4. **Verify HPAs:**
+  ```bash
+  kubectl get hpa -n martianbank
+  kubectl describe hpa transactions -n martianbank
+  kubectl describe hpa customer-auth -n martianbank
+  ```
+
+---
+
+### 8. Access the Application
+
+Once the NGINX service has an external IP, open `http://EXTERNAL_IP:8080` in your browser.
+
+---
+
+## Uninstalling MartianBank
+
+1. **Uninstall with Helm:**
+  ```bash
+  helm uninstall martianbank -n martianbank
+  ```
+2. **Delete remaining resources (if needed):**
+  ```bash
+  kubectl delete all --all --namespace martianbank
+  ```
+
+---
+
+## Troubleshooting
+
+- Check pod status: `kubectl get pods -n martianbank`
+- View logs: `kubectl logs <pod-name> -n martianbank`
+- Describe pod: `kubectl describe pod <pod-name> -n martianbank`
+- Test MongoDB connectivity from pod:
+  ```bash
+  kubectl run -it --rm mongo-test --image=mongo:latest --restart=Never --namespace=martianbank -- mongosh "mongodb://root:PASSWORD@10.128.0.2:27017/admin?authSource=admin"
+  ```
+
+---
+
+## Performance Testing
+
+1. **Update Locust URLs in `performance_locust/api_urls.py`**
+2. **Run Locust tests:**
+  ```bash
+  cd performance_locust
+  locust -f loan_locust.py --host=http://LOAD_BALANCER_IP
+  ```
+
+---
+
+## License
+
+This project is licensed under the MIT License.
 
 Before installing MartianBank, you need to have Helm installed on your local machine.
 
