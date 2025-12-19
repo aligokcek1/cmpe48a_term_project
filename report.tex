@@ -84,7 +84,7 @@ Martian Bank is a cloud-native microservices banking application successfully de
 \textbf{}
 \begin{figure}
     \centering
-    \includegraphics[width=1\linewidth]{image.png}
+    \includegraphics[width=1\linewidth]{arch_diag.png}
 \end{figure}
 
 \textbf{Note:} A detailed Mermaid diagram is also available in \texttt{docs/FINAL\_DOCS/ARCHITECTURE\_DIAGRAM.md}.
@@ -160,8 +160,6 @@ NGINX & NGINX & 8080 & 1 & No & Internal API Gateway / Reverse Proxy \\
 \end{tabular}
 \end{center}
 
-\textbf{Common Resources:} CPU 100m--500m, Memory 128Mi--512Mi (NGINX: CPU 50m--200m, Memory 64Mi--256Mi)
-
 \textbf{NGINX Routing:}
 \begin{itemize}[leftmargin=*]
   \item \texttt{/} \(\rightarrow\) UI (3000)
@@ -197,35 +195,75 @@ atm-locator-service & Node.js 18 & \url{https://atm-locator-service-gcb4q3froa-u
 \textbf{Common Configuration:} VPC Connector (loan-connector), MongoDB connection via VPC
 
 % =========================================================
+% =========================================================
+% =========================================================
+% =========================================================
+% =========================================================
 \section{Deployment Process}
 
-\subsection{Prerequisites}
+\subsection{Prerequisites }
+Martian Bank is deployed on GCP using a hybrid architecture: core services run on GKE and serverless components run on Cloud Functions (Gen 2), both using a shared MongoDB backend reachable only through private networking.
+
+\subsubsection{GCP Project \& Billing}
 \begin{itemize}[leftmargin=*]
-  \item GCP account with \$300 free trial credits
-  \item \texttt{gcloud} CLI installed and authenticated
-  \item \texttt{kubectl} installed
-  \item \texttt{helm} installed
-  \item \texttt{docker} installed (optional, for local testing)
-  \item Basic knowledge of Kubernetes, GCP, and microservices
+  \item Create or select a GCP project and ensure billing is enabled.
+  \item Enable the required GCP APIs (Container, Compute, Cloud Functions, Cloud Run, Cloud Build, Artifact Registry, and Serverless VPC Access).
 \end{itemize}
 
-\subsection{Infrastructure Setup}
+\begin{lstlisting}[language=bash,caption={Enable required GCP APIs}]
+gcloud services enable \
+  container.googleapis.com \
+  compute.googleapis.com \
+  cloudfunctions.googleapis.com \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
+  vpcaccess.googleapis.com
 
-\subsubsection{GCP Project Setup}
-\begin{lstlisting}[language=bash,caption={GCP project setup}]
-# Set project
-gcloud config set project YOUR_PROJECT_ID
-
-# Enable required APIs
-gcloud services enable container.googleapis.com
-gcloud services enable compute.googleapis.com
-gcloud services enable cloudfunctions.googleapis.com
-gcloud services enable cloudbuild.googleapis.com
+gcloud config get-value project
 \end{lstlisting}
 
-\subsubsection{MongoDB VM Setup}
-\begin{lstlisting}[language=bash,caption={MongoDB VM setup}]
-# Create VM
+\subsubsection{Local Tooling}
+\begin{itemize}[leftmargin=*]
+  \item Install and configure: \texttt{gcloud}, \texttt{kubectl}, \texttt{helm}
+  \item Verify installations before continuing.
+\end{itemize}
+
+\begin{lstlisting}[language=bash,caption={Install/verify gcloud, kubectl, helm}]
+# gcloud SDK
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
+
+# kubectl
+gcloud components install kubectl
+
+# Helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# Verify
+gcloud version
+kubectl version --client
+helm version
+\end{lstlisting}
+
+\subsubsection{Docker}
+\begin{itemize}[leftmargin=*]
+  \item Docker is required to build and push service images.
+  \item Configure Docker authentication for pushing images to Google registries.
+\end{itemize}
+
+\begin{lstlisting}[language=bash,caption={Configure Docker authentication}]
+gcloud auth configure-docker
+\end{lstlisting}
+
+
+% =========================================================
+\subsection{Infrastructure Setup }
+
+\subsubsection{Step 1 -- MongoDB VM Setup}
+MongoDB is hosted on a private Compute Engine VM (no public IP). This design isolates the database from the public internet and forces all access through GCP internal networking.
+
+\begin{lstlisting}[language=bash,caption={Create MongoDB VM}]
 gcloud compute instances create mongodb-vm \
   --zone=us-central1-a \
   --machine-type=e2-small \
@@ -233,72 +271,84 @@ gcloud compute instances create mongodb-vm \
   --image-project=ubuntu-os-cloud \
   --boot-disk-size=40GB
 
-# SSH into VM and install MongoDB
 gcloud compute ssh mongodb-vm --zone=us-central1-a
-# [Follow MongoDB installation steps]
+# Install MongoDB Community Edition, enable auth, bind appropriately, create admin user.
 \end{lstlisting}
 
-\textbf{Steps:}
-\begin{enumerate}[leftmargin=*]
-  \item SSH into VM
-  \item Update system packages
-  \item Install MongoDB Community Edition
-  \item Configure MongoDB for network access
-  \item Set up authentication (create root user)
-  \item Configure firewall rules
-  \item Test connectivity
-\end{enumerate}
+\subsubsection{Step 2 -- Firewall Rules (Critical)}
+Firewall rules are configured so that MongoDB accepts traffic only from trusted internal ranges (e.g., the GKE cluster Pod/Node CIDRs). This prevents external connections and reduces the attack surface.
 
-\subsubsection{GKE Cluster Setup}
-\begin{lstlisting}[language=bash,caption={GKE cluster setup}]
-# Create cluster
+\begin{lstlisting}[language=bash,caption={Create Firewall Rule}]
+gcloud compute instances add-tags mongodb-vm \
+  --zone=us-central1-a \
+  --tags=mongodb
+
+gcloud compute firewall-rules create allow-mongodb-from-gke \
+  --network=default \
+  --direction=INGRESS \
+  --rules=tcp:27017 \
+  --source-ranges=10.12.0.0/14 \ # GKE IP range
+  --target-tags=mongodb
+\end{lstlisting}
+
+\subsubsection{Step 2.5 -- Serverless VPC Access Connector (Required)}
+Cloud Functions (Gen 2) can only reach a private MongoDB VM when deployed with a Serverless VPC Access connector.
+
+\begin{lstlisting}[language=bash,caption={Create Serverless VPC Access Connector}]
+gcloud compute networks vpc-access connectors create loan-connector \
+  --region=us-central1 \
+  --subnet=default \
+  --min-instances=2 \
+  --max-instances=3
+\end{lstlisting}
+
+\subsubsection{Step 3 -- Build \& Push Docker Images}
+All core services are containerized and pushed to a GCP container registry (e.g., Artifact Registry or GCR), then referenced by the Helm chart during deployment.
+
+\begin{lstlisting}[language=bash,caption={Docker authentication and image push (conceptual)}]
+# Authenticate (once)
+gcloud auth configure-docker
+
+# Build & push per service (example pattern)
+docker build -t REGION-docker.pkg.dev/$PROJECT_ID/REPO/service:TAG .
+docker push REGION-docker.pkg.dev/$PROJECT_ID/REPO/service:TAG
+\end{lstlisting}
+
+
+
+
+% =========================================================
+\subsection{Application Deployment }
+
+\subsubsection{Step 4 -- GKE Cluster}
+\begin{lstlisting}[language=bash,caption={Create GKE cluster }]
 gcloud container clusters create martianbank-cluster \
   --zone=us-central1-a \
   --num-nodes=3 \
   --machine-type=e2-medium \
   --disk-size=40GB
 
-# Get credentials
 gcloud container clusters get-credentials martianbank-cluster --zone=us-central1-a
 \end{lstlisting}
 
-\textbf{Configuration:}
-\begin{itemize}[leftmargin=*]
-  \item Cluster name: martianbank-cluster
-  \item Zone: us-central1-a
-  \item Node count: 3 (fixed)
-  \item Machine type: e2-medium (2 vCPU, 4GB RAM each)
-  \item Disk size: 40GB per node (pd-balanced)
-  \item Auto-scaling: Disabled (fixed 3 nodes)
-\end{itemize}
+\subsubsection{Step 5 -- Deploy GKE Services with Helm}
+GKE microservices are deployed with Helm for repeatability and configuration management.
 
-\subsection{Application Deployment}
+\begin{lstlisting}[language=bash,caption={Deploy Martian Bank with Helm}]
+kubectl create namespace martianbank
 
-\subsubsection{Container Image Building}
-\begin{lstlisting}[language=bash,caption={Container image build (placeholder)}]
-# Set project ID
-export PROJECT_ID=YOUR_PROJECT_ID
-
-# Build and push images (using GCP Cloud Build)
-# [Describe your image building process]
+helm install martianbank ./martianbank \
+  --namespace martianbank \
+  --set SERVICE_PROTOCOL=http \
+  --set DB_URL="mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin" \
+  --set mongodb.enabled=false \
+  --set nginx.enabled=true
 \end{lstlisting}
 
-\textbf{Images Built:}
-\begin{itemize}[leftmargin=*]
-  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-ui:latest}
-  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-customer-auth:v2}
-  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-dashboard:latest}
-  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-accounts:latest}
-  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-transactions:v2}
-  \item \texttt{gcr.io/cmpe48a-term-project/martianbank-nginx:latest}
-\end{itemize}
+\subsubsection{Step 6 -- Deploy Cloud Functions (Gen 2)}
+Serverless components (loan and ATM services) are deployed as Cloud Functions (Gen 2). When they need database access, they are deployed with the VPC connector.
 
-\textbf{Note:} Images are built using GCP Cloud Build for \texttt{linux/amd64} platform.
-
-\subsubsection{Cloud Functions Deployment}
-\begin{lstlisting}[language=bash,caption={Cloud Functions deployment example}]
-# Deploy Loan Function
-cd cloud-functions/loan
+\begin{lstlisting}[language=bash,caption={Cloud Functions (Gen 2) deployment example}]
 gcloud functions deploy loan-request \
   --gen2 \
   --runtime=python311 \
@@ -309,99 +359,59 @@ gcloud functions deploy loan-request \
   --allow-unauthenticated \
   --vpc-connector=loan-connector \
   --set-env-vars="DB_URL=mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin"
-
-# [Repeat for other functions]
 \end{lstlisting}
 
-\textbf{Functions Deployed:}
-\begin{itemize}[leftmargin=*]
-  \item loan-request: \url{https://loan-request-gcb4q3froa-uc.a.run.app}
-  \item loan-history: \url{https://loan-history-gcb4q3froa-uc.a.run.app}
-  \item atm-locator-service: \url{https://atm-locator-service-gcb4q3froa-uc.a.run.app}
-\end{itemize}
 
-\textbf{VPC Connector Setup:}
-\begin{lstlisting}[language=bash,caption={VPC connector setup}]
-# Create VPC Connector (if not exists)
-gcloud compute networks vpc-access connectors create loan-connector \
-  --region=us-central1 \
-  --subnet=default \
-  --subnet-project=cmpe48a-term-project \
-  --min-instances=2 \
-  --max-instances=3
-\end{lstlisting}
+% =========================================================
+\subsection{Autoscaling, Access, and Operations }
 
-\subsubsection{Kubernetes Deployment}
-\begin{lstlisting}[language=bash,caption={Kubernetes deployment with Helm}]
-# Create namespace
-kubectl create namespace martianbank
+\subsubsection{Horizontal Pod Autoscaling (HPA)}
+To handle varying load conditions, HPAs are configured for selected GKE services. In this project, HPAs are created manually via \texttt{kubectl} (not through Helm charts).
 
-# Create ConfigMap
-kubectl create configmap configmap-martianbank \
-  --from-literal=DB_URL="mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin" \
-  --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
-  --namespace=martianbank
-
-# Deploy with Helm
-helm install martianbank ./martianbank \
-  --namespace martianbank \
-  --set SERVICE_PROTOCOL=http \
-  --set DB_URL="mongodb://root:PASSWORD@VM_IP:27017/bank?authSource=admin" \
-  --set imageRegistry="gcr.io/$PROJECT_ID" \
-  --set mongodb.enabled=false \
-  --set nginx.enabled=true
-\end{lstlisting}
-
-\subsubsection{HPA Configuration}
-\begin{lstlisting}[language=bash,caption={Manual HPA configuration}]
-# Install metrics server (if not already installed)
+\begin{lstlisting}[language=bash,caption={Install Metrics Server (required for HPA)}]
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl get deployment metrics-server -n kube-system
+\end{lstlisting}
 
-# Create HPA for Transactions Service
+\begin{lstlisting}[language=bash,caption={Create HPAs for transactions and customer-auth}]
 kubectl autoscale deployment transactions -n martianbank \
   --min=1 \
   --max=3 \
   --cpu=50%
 
-# Create HPA for Customer-Auth Service
 kubectl autoscale deployment customer-auth -n martianbank \
   --min=2 \
   --max=2 \
   --cpu=50%
 
-# Verify HPAs
 kubectl get hpa -n martianbank
 \end{lstlisting}
 
-\textbf{Note:} HPAs are manually configured using \texttt{kubectl} commands, not via Helm charts.
-
-\subsubsection{Load Balancer Configuration}
-\begin{lstlisting}[language=bash,caption={Load Balancer external IP}]
-# Check service status
-kubectl get service nginx -n martianbank
-
-# Wait for external IP assignment
+\subsubsection{Access Application}
+\begin{lstlisting}[language=bash,caption={Get external IP for NGINX entrypoint}]
 kubectl get service nginx -n martianbank -w
 \end{lstlisting}
 
-\textbf{Result:} External IP assigned: \texttt{136.119.54.74:8080}\\
-\textbf{Application URL:} \url{http://136.119.54.74:8080}
-
-\subsection{Database Population}
-\begin{lstlisting}[language=bash,caption={Database population example}]
-# Populate MongoDB with test data
-./scripts/populate_atms_mongosh.sh PASSWORD
-
-# Verify data
-# [Commands to verify database contents]
+Open:
+\begin{lstlisting}[language=bash,caption={Application URL format}]
+http://EXTERNAL_IP:8080
 \end{lstlisting}
+
+\subsubsection{Uninstall / Cleanup}
+\begin{lstlisting}[language=bash,caption={Uninstall helm release and namespace cleanup}]
+helm uninstall martianbank -n martianbank
+kubectl delete namespace martianbank
+\end{lstlisting}
+
+
+
 
 \subsection{Verification Steps}
 
 \textbf{1. Check Pod Status:}
 \begin{lstlisting}[language=bash]
 kubectl get pods -n martianbank
-# Expected: All 6 pods in Running state
+# Expected: All 6 + 1 pods in Running state
 \end{lstlisting}
 
 \textbf{2. Verify Services:}
@@ -443,7 +453,7 @@ curl -X POST https://atm-locator-service-gcb4q3froa-uc.a.run.app/api/atm \
 \begin{lstlisting}[language=bash]
 # Test MongoDB connection from a pod
 kubectl run -it --rm mongo-test --image=mongo:latest --restart=Never -n martianbank -- \
-  mongosh "mongodb://root:123456789@10.128.0.2:27017/bank?authSource=admin"
+  mongosh "mongodb://root:PASSWORD@10.128.0.2:27017/bank?authSource=admin"
 \end{lstlisting}
 
 \textbf{6. Verify HPAs:}
@@ -705,7 +715,7 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.85\linewidth]{cluster_Res_200_10_init.png}
+  \includegraphics[width=0.8\linewidth]{cluster_Res_200_10_init.png}
   \caption{Experiment 4: Cluster resource utilization during \texttt{initial\_200\_10} with no-node autoscaling.}
   \label{fig:exp4_cluster_resource}
 \end{figure}
@@ -759,6 +769,7 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
   \caption{Experiment 5: Locust performance graphs comparison.}
   \label{fig:exp5_bcrypt_locust_compare}
 \end{figure}
+\newpage
 
 \subsubsection{Experiment 5.1: Increase Transactions DB connection pool size}
 \begin{itemize}[leftmargin=*]
@@ -770,7 +781,7 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
       \item \textbf{Overall reliability worsened:} failure rate 16.18\% (607/3753) $\rightarrow$ 19.31\% (1029/5330).
       \item \textbf{Transactions regressed significantly:} Internal Transfer failures 292/363 $\rightarrow$ 521/547; View History failures 292/439 $\rightarrow$ 508/672.
       \item \textbf{Auth is not the limiter in this run:} Login avg 38.84s $\rightarrow$ 6.51s; Register failures 11.5\% $\rightarrow$ 0\%.
-      \item \textbf{Key takeaway:} increasing the Transactions DB pool size alone did \emph{not} resolve the bottleneck; transaction failures remained dominant (and higher), suggesting constraints such as DB contention/timeouts/transaction-service behavior. Higher end-to-end throughput may also amplify downstream pressure on Transactions. So, we revert the pool size increment.
+      \item \textbf{Key takeaway:} increasing the Transactions DB pool size alone did \emph{not} resolve the bottleneck; transaction failures remained dominant (and higher), suggesting constraints such as DB contention/timeouts/transaction-service behavior. Higher end-to-end throughput may also amplify downstream pressure on Transactions. Consequently, we revert the pool size increment.
     \end{itemize}
 \end{itemize}
 
@@ -792,7 +803,6 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
     \end{itemize}
 \end{itemize}
 
-\newpage
 
 \begin{figure}[t]
   \centering
@@ -826,7 +836,7 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
       \item \textbf{Key takeaway:} lowering the CPU target (more responsive scaling) and capping auth to 2 did \emph{not} reduce performance; instead, the system became \textbf{stable at 200\_10} with near-zero errors. This indicates the previous failures were not primarily due to insufficient auth replicas, and that the dominant transaction instability can be mitigated under the tuned HPA behavior.
     \end{itemize}
 \end{itemize}
-\newpage
+
 
 \begin{figure}[t]
   \centering
@@ -884,10 +894,10 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
   \item VM: e2-small (2 vCPU, 2GB RAM)
   \item DB pool size: Default (100)
   \item Hashing auth (bcrypt): 8 rounds (10 rounds before)
-  \item Auth HPA min/max: 2/2 (no HPA initially)
-  \item Transaction HPA min/max: 1/3 (no HPA initially)
+  \item Auth HPA min/max: 2/2 (no HPA before)
+  \item Transaction HPA min/max: 1/3 (no HPA before)
   \item Node autoscaling: Off
-  \item HPA CPU threshold: 50\%
+  \item HPA CPU threshold: 50\% (70\% before)
 \end{itemize}
 
 \begin{itemize}[leftmargin=*]
@@ -931,7 +941,9 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
       \item \textbf{Failures remained low in both runs:} 26/25835 $\rightarrow$ 15/22011 (\textbf{$\approx$0.1\%} order).
       \item \textbf{Latency worsened under max=10:} aggregated avg \textbf{573ms $\rightarrow$ 1.57s}; p95 \textbf{2.2s $\rightarrow$ 6.1s}; p99 \textbf{9.8s $\rightarrow$ 20s} (max \textbf{25.4s $\rightarrow$ 35.3s}).
       \item \textbf{Node capacity became the limiter:} with \textbf{node autoscaling OFF}, raising HPA ceilings caused many pods to remain \textbf{Pending} (insufficient cluster resources). Extra replicas therefore could not translate into effective throughput and may increase contention/scheduling overhead.
+      \item \textbf{Observations:} Auth service quickly consumed most of the cluster's resources by aggressively scaling up to 7-10 pods, which lead to inadequate unused resources for the Transaction service to scale up. Consequently, transaction latency increased significantly.
       \item \textbf{Key takeaway:} increasing HPA max replicas without adding node capacity (or enabling node autoscaling) can \textbf{degrade performance} at high load; scaling is limited by the cluster, not the HPA object.
+      
     \end{itemize}
 \end{itemize}
 
@@ -954,7 +966,7 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.43\linewidth]{node_exhaustion_max10.png}
-  \caption{Experiment 6.1: evidence of node exhaustion (many pods in \texttt{Pending} state) when HPA ceilings were increased while node autoscaling was disabled.}
+  \caption{Experiment 6.1: evidence of node exhaustion (many pods in \texttt{Pending} state especially Transaction pods) when HPA ceilings were increased while node autoscaling was disabled.}
   \label{fig:exp61_node_exhaustion}
 \end{figure}
 
@@ -965,7 +977,7 @@ Multiple experiments were conducted by changing \textbf{one major factor at a ti
 \subsection{Monthly Cost Estimation}
 We have optimized resource selection to ensure the total monthly cost remains well below the \$300 free trial budget.
 
-\textbf{Projected Monthly Cost: \(\sim\$172.55\)}
+\textbf{Projected Monthly Cost: \(\sim\$183.55\)}
 
 \begin{center}
 \begin{tabular}{@{}p{3cm}p{6cm}p{2.5cm}p{5.0cm}@{}}
@@ -981,7 +993,7 @@ Serverless & Cloud Functions (Gen 2) & \$0.00 & Expected to remain within free t
 Container Registry & Image storage (\(\sim\)1GB) & \(\sim\$1.00\) & Docker image storage \\
 Network Egress & Data transfer & \(\sim\$5\)--\$10 & Variable based on traffic volume \\
 \midrule
-\textbf{Total} &  & \textbf{\(\sim\$172.55\)} & \textbf{(58\% of total budget)} \\
+\textbf{Total} &  & \textbf{\(\sim\$183.55\)} & \textbf{(61\% of total budget)} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -993,35 +1005,12 @@ Network Egress & Data transfer & \(\sim\$5\)--\$10 & Variable based on traffic v
   \item \textbf{Fixed Cluster Size:} No node auto-scaling (fixed 3 nodes) for predictable costs
   \item \textbf{Optimized Database VM:} e2-small instance provides adequate MongoDB performance while minimizing compute costs
   \item \textbf{Selective HPA:} Only transactions and customer-auth services have auto-scaling enabled
-  \item \textbf{Cloud Functions Free Tier:} Loan and ATM services use Cloud Functions (expected within free tier)
+  \item \textbf{Cloud Functions Free Tier:} Loan and ATM ssection dervices use Cloud Functions (expected within free tier)
   \item \textbf{Efficient Storage:} 40GB disks per node using pd-balanced for cost efficiency
   \item \textbf{Zonal Cluster:} Single zonal cluster eliminates management fees
   \item \textbf{Resource Management:} Requests/limits prevent resource waste
 \end{enumerate}
 
 % =========================================================
-\section{References}
-
-\subsection{Documentation}
-\begin{itemize}[leftmargin=*]
-  \item \href{https://cloud.google.com/docs}{GCP Documentation}
-  \item \href{https://cloud.google.com/kubernetes-engine/docs}{GKE Documentation}
-  \item \href{https://cloud.google.com/functions/docs}{Cloud Functions Documentation}
-  \item \href{https://kubernetes.io/docs/}{Kubernetes Documentation}
-  \item \href{https://docs.locust.io/}{Locust Documentation}
-\end{itemize}
-
-\subsection{Project Documentation}
-\begin{itemize}[leftmargin=*]
-  \item \texttt{docs/FINAL\_DOCS/COMPREHENSIVE\_PROJECT\_REPORT.md} - Detailed project report
-  \item \texttt{docs/FINAL\_DOCS/ARCHITECTURE\_DIAGRAM.md} - Architecture diagrams (Mermaid)
-  \item \texttt{docs/FINAL\_DOCS/INGRESS\_ROUTING\_DIAGRAM.md} - Ingress and routing diagram
-  \item \texttt{docs/FINAL\_DOCS/PRESENTATION\_SUMMARY.md} - Presentation summary
-  \item \texttt{docs/PROJECT\_STATUS\_GUIDE.md} - Current project status and development guide
-  \item \texttt{docs/GKE\_DEPLOYMENT\_GUIDE.md} - Step-by-step deployment guide
-  \item \texttt{docs/K8S\_DEPLOYMENT\_STEPS.md} - Kubernetes deployment steps
-  \item \texttt{docs/QUICK\_START.md} - Quick start guide
-  \item \texttt{README.md} - Project overview and setup
-\end{itemize}
 
 \end{document}
