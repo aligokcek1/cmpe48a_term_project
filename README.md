@@ -148,7 +148,7 @@ Edit `/etc/mongod.conf`:
 
 ```yaml
 net:
-  bindIp: 0.0.0.0
+  bindIp: 10.128.0.2 # VM's internal IP address for enhanced security. Optionally enter 0.0.0.0 to listen all ranges
 security:
   authorization: enabled
 ```
@@ -193,7 +193,7 @@ gcloud compute firewall-rules create allow-mongodb-from-gke \
   --network=default \
   --direction=INGRESS \
   --rules=tcp:27017 \
-  --source-ranges=10.128.0.0/20,10.12.0.0/14,10.8.1.0/28 \
+  --source-ranges=10.12.0.0/14 # GKE IP range \
   --target-tags=mongodb
 ```
 
