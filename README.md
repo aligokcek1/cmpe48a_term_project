@@ -325,11 +325,6 @@ http://EXTERNAL_IP:8080
 
 ---
 
-## Troubleshooting
-
-* `ImagePullBackOff` → image name mismatch
-* `CrashLoopBackOff` → MongoDB not reachable (firewall / CIDR / connector)
-* `502 Bad Gateway` → backend pods down or Cloud Function URL missing
 
 ---
 
@@ -342,6 +337,3 @@ kubectl delete namespace martianbank
 
 ---
 
-## License
-
-BSD 3-Clause License
