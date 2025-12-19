@@ -1,21 +1,12 @@
-
-Scale limit 70 ten 60a dusur
-Db indexing
-Deneyler daha açık - hpa scale grafigi göster
-Try slow ramp up - the system may cannot catch up - hpa threshold
-Sticky session
-
 Independent vars:
 - VM cpu/memory
 - HPA cpu threshold
 - Node autoscaling
 - DB pool size
-- DB indexing
 - Ramp up
 - Hashing auth
 - HPA min replica
 - HPA max replica
-- Cluster machine type
 
 Initial configs:
 VM: e2-small 2vcpu, 2gb memory

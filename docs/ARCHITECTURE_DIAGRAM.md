@@ -91,43 +91,4 @@ graph TB
     class LoanRequest,LoanHistory,ATMLocator serverless
     class LoadBalancer,Nginx,VPCConnector infrastructure
 ```
-## Infrastructure Components
 
-```mermaid
-graph TB
-    subgraph "GCP Infrastructure"
-        subgraph "Kubernetes Cluster"
-            Node1[Node 1<br/>e2-medium<br/>2 vCPU, 4GB]
-            Node2[Node 2<br/>e2-medium<br/>2 vCPU, 4GB]
-            Node3[Node 3<br/>e2-medium<br/>2 vCPU, 4GB]
-        end
-
-        subgraph "Compute Engine"
-            MongoDBVM[MongoDB VM<br/>e2-small<br/>2 vCPU, 2GB RAM]
-        end
-
-        subgraph "Cloud Functions"
-            CF1[loan-request]
-            CF2[loan-history]
-            CF3[atm-locator]
-        end
-
-        subgraph "Networking"
-            LB[Load Balancer<br/>External IP]
-            VPC[VPC Connector]
-        end
-    end
-
-    LB --> Node1
-    LB --> Node2
-    LB --> Node3
-
-    Node1 --> MongoDBVM
-    Node2 --> MongoDBVM
-    Node3 --> MongoDBVM
-
-    CF1 --> VPC
-    CF2 --> VPC
-    CF3 --> VPC
-    VPC --> MongoDBVM
-```
