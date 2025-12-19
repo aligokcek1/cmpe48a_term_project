@@ -49,7 +49,7 @@ This guide explains how to deploy the **entire MartianBank system** end-to-end.
 
 * Create/select a GCP project
 * Enable billing
-* Enable APIs:
+* Enable required APIs:
 
 ```bash
 gcloud services enable \
@@ -58,7 +58,8 @@ gcloud services enable \
   cloudfunctions.googleapis.com \
   run.googleapis.com \
   cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com
+  artifactregistry.googleapis.com \
+  vpcaccess.googleapis.com
 ```
 
 Verify:
@@ -116,6 +117,8 @@ gcloud compute instances create mongodb-vm \
   --boot-disk-size=40GB
 ```
 
+---
+
 ### 1.2 Install MongoDB
 
 ```bash
@@ -125,17 +128,19 @@ sudo apt update
 sudo apt install -y curl gnupg ca-certificates
 
 curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
-sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
+  sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
 
 echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] \
 https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
-sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+  sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
 
 sudo apt update
 sudo apt install -y mongodb-org
 sudo systemctl enable mongod
 sudo systemctl start mongod
 ```
+
+---
 
 ### 1.3 Configure MongoDB
 
@@ -179,19 +184,16 @@ gcloud compute instances describe mongodb-vm \
 
 ## Step 2 – Firewall Rules (Critical)
 
-GKE **pods** use a different CIDR than nodes. Both must be allowed.
-
 ```bash
 gcloud compute instances add-tags mongodb-vm \
   --zone=us-central1-a \
   --tags=mongodb
 
-# Allow Node + Pod CIDR
 gcloud compute firewall-rules create allow-mongodb-from-gke \
   --network=default \
   --direction=INGRESS \
   --rules=tcp:27017 \
-  --source-ranges=10.128.0.0/20,10.12.0.0/14 \
+  --source-ranges=10.128.0.0/20,10.12.0.0/14,10.8.1.0/28 \
   --target-tags=mongodb
 ```
 
@@ -238,7 +240,7 @@ kubectl create namespace martianbank
 
 ---
 
-## Step 5 – Deploy GKE Services with Helm
+## Step 5 – Deploy with Helm
 
 ```bash
 MONGODB_IP="10.128.0.2"
@@ -258,13 +260,9 @@ helm install martianbank ./martianbank \
 
 ---
 
-## Step 6 – Deploy Cloud Functions (Gen 2)
-
-### ATM Locator (Node.js)
+## Step 6 – Cloud Functions (Gen 2 + VPC Connector)
 
 ```bash
-cd cloud-functions/atm-locator
-
 gcloud functions deploy atmLocator \
   --gen2 \
   --runtime=nodejs20 \
@@ -272,51 +270,44 @@ gcloud functions deploy atmLocator \
   --entry-point=atmLocator \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars DB_URL="$DB_URL"
+  --set-env-vars DB_URL="$DB_URL" \
+  --vpc-connector=cf-connector \
+  --egress-settings=private-ranges-only
 ```
 
-### Loan Functions (Python)
+(Similar commands for `process_loan_request` and `get_loan_history`.)
+
+---
+
+## Step 7 – Horizontal Pod Autoscaler (HPA)
+
+### Install Metrics Server
 
 ```bash
-cd cloud-functions/loan
-
-gcloud functions deploy process_loan_request \
-  --gen2 \
-  --runtime=python312 \
-  --region=us-central1 \
-  --entry-point=process_loan_request \
-  --trigger-http \
-  --allow-unauthenticated \
-  --set-env-vars DB_URL="$DB_URL"
-
-
-gcloud functions deploy get_loan_history \
-  --gen2 \
-  --runtime=python312 \
-  --region=us-central1 \
-  --entry-point=get_loan_history \
-  --trigger-http \
-  --allow-unauthenticated \
-  --set-env-vars DB_URL="$DB_URL"
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
 ```
 
-Resolve URLs:
+### Create HPAs
 
 ```bash
-PROCESS_LOAN_URL=$(gcloud functions describe process_loan_request --gen2 --region=us-central1 --format="value(serviceConfig.uri)")
-LOAN_HISTORY_URL=$(gcloud functions describe get_loan_history --gen2 --region=us-central1 --format="value(serviceConfig.uri)")
-ATM_LOCATOR_URL=$(gcloud functions describe atmLocator --gen2 --region=us-central1 --format="value(serviceConfig.uri)")
+kubectl autoscale deployment transactions -n martianbank \
+  --min=1 \
+  --max=3 \
+  --cpu=50%
+
+kubectl autoscale deployment customer-auth -n martianbank \
+  --min=2 \
+  --max=2 \
+  --cpu=50%
 ```
 
-Upgrade Helm:
+Verify:
 
 ```bash
-helm upgrade martianbank ./martianbank \
-  -n martianbank \
-  --set cloudFunctions.loanRequestURL="$PROCESS_LOAN_URL" \
-  --set cloudFunctions.loanHistoryURL="$LOAN_HISTORY_URL" \
-  --set cloudFunctions.atmLocatorURL="$ATM_LOCATOR_URL"
+kubectl get hpa -n martianbank
 ```
+
+> HPAs are intentionally configured **manually via kubectl**, not via Helm, to demonstrate operational control.
 
 ---
 
@@ -334,6 +325,13 @@ http://EXTERNAL_IP:8080
 
 ---
 
+## Troubleshooting
+
+* `ImagePullBackOff` → image name mismatch
+* `CrashLoopBackOff` → MongoDB not reachable (firewall / CIDR / connector)
+* `502 Bad Gateway` → backend pods down or Cloud Function URL missing
+
+---
 
 ## Uninstall
 
@@ -342,3 +340,8 @@ helm uninstall martianbank -n martianbank
 kubectl delete namespace martianbank
 ```
 
+---
+
+## License
+
+BSD 3-Clause License
